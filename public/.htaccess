@@ -1,0 +1,27 @@
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /
+
+  # 1. Forward /api/auth/login to api.php?action=login
+  RewriteRule ^api/auth/login/?$ api.php?action=login [QSA,L]
+
+  # 2. Forward /api/auth/public-users to api.php?action=get_users
+  RewriteRule ^api/auth/public-users/?$ api.php?action=get_users [QSA,L]
+
+  # 3. Forward /api/auth/me to api.php?action=me
+  RewriteRule ^api/auth/me/?$ api.php?action=me [QSA,L]
+
+  # 4. Forward /api/nodes to api.php?action=get_nodes
+  RewriteRule ^api/nodes/?$ api.php?action=get_nodes [QSA,L]
+
+  # 5. Forward /api/users to api.php?action=get_users
+  RewriteRule ^api/users/?$ api.php?action=get_users [QSA,L]
+
+  # 6. Catch all other /api/* requests and route to api.php
+  RewriteRule ^api/(.*)$ api.php?action=$1 [QSA,L]
+
+  # 7. Single Page Application (SPA) fallback
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME} !-d
+  RewriteRule ^ index.html [L]
+</IfModule>

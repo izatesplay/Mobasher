@@ -1,38 +1,28 @@
 <?php
 /**
  * =========================================================================================
- *  مباشر - پل ارتباطی دیتابیس (PHP & MySQL API Bridge for cPanel / phpMyAdmin)
- * =========================================================================================
- * 
- * راهنمای تنظیم دیتابیس در هاست cPanel:
- * ۱. وارد cPanel شوید و یک دیتابیس MySQL جدید ایجاد کنید (مثلا: karmon_db).
- * ۲. یک کاربر دیتابیس (User) بسازید و تمام دسترسی‌ها (ALL PRIVILEGES) را به آن بدهید.
- * ۳. مقادیر DB_HOST, DB_USER, DB_PASS, DB_NAME را در خطوط پایین ویرایش کنید.
- * ۴. این فایل به صورت خودکار جداول (Tables) را با پشتیبانی کامل از زبان فارسی (utf8mb4) می‌سازد.
+ *  مباشر - پل ارتباطی کامل دیتابیس MySQL و API کامل برای هوسپینگ و cPanel / phpMyAdmin
  * =========================================================================================
  */
 
-// تنظیم هدرهای CORS برای دسترسی بدون محدودیت کلاینت به API
 header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS");
 header("Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With");
 header("Content-Type: application/json; charset=UTF-8");
 
-// مدیریت درخواسته های Preflight OPTIONS
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(200);
     exit();
 }
 
 // -----------------------------------------------------------------------------------------
-// ۱. تنظیمات اتصال دیتابیس MySQL (لطفاً اطلاعات cPanel خود را اینجا قرار دهید)
+// ۱. تنظیمات اتصال دیتابیس MySQL (میتوانید در cPanel این مقادیر را تغییر دهید)
 // -----------------------------------------------------------------------------------------
 define('DB_HOST', 'localhost');
 define('DB_USER', 'root');         // نام کاربر MySQL در cPanel
 define('DB_PASS', '');             // رمز عبور دیتابیس
 define('DB_NAME', 'mobasher_karmon_db'); // نام دیتابیس
 
-// جلوگیری از نمایش خطاهای خام PHP و شکستن ساختار JSON
 error_reporting(0);
 ini_set('display_errors', '0');
 
@@ -47,21 +37,19 @@ function send_error($message, $statusCode = 400) {
 }
 
 // -----------------------------------------------------------------------------------------
-// ۲. اتصال به دیتابیس PDO و ساخت خودکار جداول در صورت عدم وجود
+// ۲. اتصال به دیتابیس PDO و ایجاد خودکار جداول و کاربر مدیر
 // -----------------------------------------------------------------------------------------
 try {
-    // ابتدا بدون انتخاب DB متصل می‌شویم تا در صورت عدم وجود دیتابیس، آن را بسازیم
     $pdo = new PDO("mysql:host=" . DB_HOST . ";charset=utf8mb4", DB_USER, DB_PASS, [
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
         PDO::MYSQL_ATTR_INIT_COMMAND => "SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci"
     ]);
 
-    // ایجاد خودکار دیتابیس در صورت عدم وجود
     $pdo->exec("CREATE DATABASE IF NOT EXISTS `" . DB_NAME . "` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
     $pdo->exec("USE `" . DB_NAME . "`");
 
-    // ساخت جدول سرفصل‌ها و حوزه‌ها (category_nodes)
+    // جدول سرفصل‌ها (category_nodes)
     $pdo->exec("CREATE TABLE IF NOT EXISTS `category_nodes` (
         `id` VARCHAR(64) NOT NULL PRIMARY KEY,
         `parentId` VARCHAR(64) NULL,
@@ -82,7 +70,7 @@ try {
         INDEX (`isPublished`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;");
 
-    // ساخت جدول کاربران کال‌سنتر (users)
+    // جدول کاربران (users)
     $pdo->exec("CREATE TABLE IF NOT EXISTS `users` (
         `id` VARCHAR(64) NOT NULL PRIMARY KEY,
         `username` VARCHAR(64) NOT NULL UNIQUE,
@@ -94,7 +82,7 @@ try {
         `lastLogin` DATETIME NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;");
 
-    // ساخت جدول سوابق سیستم (audit_logs)
+    // جدول لاگ‌ها (audit_logs)
     $pdo->exec("CREATE TABLE IF NOT EXISTS `audit_logs` (
         `id` VARCHAR(64) NOT NULL PRIMARY KEY,
         `userId` VARCHAR(64) NULL,
@@ -104,24 +92,60 @@ try {
         `timestamp` DATETIME DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;");
 
+    // ایجاد یا بروزرسانی کاربر مدیر ارشد (admin / 13781378mM@)
+    $adminCheck = $pdo->prepare("SELECT id FROM users WHERE username = 'admin'");
+    $adminCheck->execute();
+    $adminExists = $adminCheck->fetch();
+
+    $hashedPass = password_hash('13781378mM@', PASSWORD_BCRYPT);
+    if (!$adminExists) {
+        $stmt = $pdo->prepare("INSERT INTO users (id, username, password, fullName, role, isActive, createdAt) VALUES (:id, :username, :password, :fullName, :role, 1, NOW())");
+        $stmt->execute([
+            ':id' => 'usr_admin_01',
+            ':username' => 'admin',
+            ':password' => $hashedPass,
+            ':fullName' => 'ادمین ارشد',
+            ':role' => 'ADMIN'
+        ]);
+    } else {
+        $stmt = $pdo->prepare("UPDATE users SET fullName = 'ادمین ارشد', role = 'ADMIN', password = :password WHERE username = 'admin'");
+        $stmt->execute([':password' => $hashedPass]);
+    }
+
 } catch (PDOException $e) {
     send_error("خطا در اتصال به MySQL: " . $e->getMessage(), 500);
 }
 
 // -----------------------------------------------------------------------------------------
-// ۳. پردازش اکشن‌ها و روتهای API
+// ۳. پردازش درخواست‌های API
 // -----------------------------------------------------------------------------------------
 $action = isset($_GET['action']) ? trim($_GET['action']) : '';
 $method = $_SERVER['REQUEST_METHOD'];
 
-// دریافت دیتای ارسال شده در بدنه درخواست (JSON)
+// استخراج هلپر روت /api/... در صورت استفاده از .htaccess
+if (empty($action)) {
+    $uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+    if (strpos($uri, '/api/auth/login') !== false) $action = 'login';
+    elseif (strpos($uri, '/api/auth/public-users') !== false) $action = 'get_users';
+    elseif (strpos($uri, '/api/auth/me') !== false) $action = 'me';
+    elseif (strpos($uri, '/api/nodes') !== false) {
+        if ($method === 'DELETE') $action = 'delete_node';
+        elseif ($method === 'POST' || $method === 'PUT') $action = 'save_node';
+        else $action = 'get_nodes';
+    } elseif (strpos($uri, '/api/users') !== false) {
+        if ($method === 'DELETE') $action = 'delete_user';
+        elseif ($method === 'POST' || $method === 'PUT') $action = 'save_user';
+        else $action = 'get_users';
+    }
+}
+
 $rawInput = file_get_contents('php://input');
 $inputData = json_decode($rawInput, true) ?? [];
 
 switch ($action) {
 
     // -------------------------------------------------------------------------------------
-    // وضعیت و تست اتصال API (Health Check)
+    // وضعیت سیستم
     // -------------------------------------------------------------------------------------
     case 'status':
         send_json([
@@ -135,7 +159,74 @@ switch ($action) {
         break;
 
     // -------------------------------------------------------------------------------------
-    // دریافت کامل تمامی داده‌ها (گت همه)
+    // احراز هویت و ورود (Login)
+    // -------------------------------------------------------------------------------------
+    case 'login':
+        $username = trim($inputData['username'] ?? $_POST['username'] ?? '');
+        $password = trim($inputData['password'] ?? $_POST['password'] ?? '');
+
+        if (!$username || !$password) {
+            send_error("نام کاربری و رمز عبور الزامی است.", 400);
+        }
+
+        $stmt = $pdo->prepare("SELECT * FROM users WHERE LOWER(username) = LOWER(:u) AND isActive = 1");
+        $stmt->execute([':u' => $username]);
+        $user = $stmt->fetch();
+
+        if (!$user) {
+            send_error("نام کاربری یا رمز عبور اشتباه است.", 401);
+        }
+
+        $isPasswordCorrect = false;
+        if (password_verify($password, $user['password'])) {
+            $isPasswordCorrect = true;
+        } elseif ($password === $user['password']) { // پشتیبانی از رمزهای هش‌نشده متنی
+            $isPasswordCorrect = true;
+        } elseif ($username === 'admin' && ($password === '13781378mM@' || password_verify('13781378mM@', $user['password']))) {
+            $isPasswordCorrect = true;
+        }
+
+        if (!$isPasswordCorrect) {
+            send_error("نام کاربری یا رمز عبور اشتباه است.", 401);
+        }
+
+        // به روزرسانی زمان آخرین ورود
+        $upd = $pdo->prepare("UPDATE users SET lastLogin = NOW() WHERE id = :id");
+        $upd->execute([':id' => $user['id']]);
+
+        $token = "token_mysql_" . bin2hex(random_bytes(16));
+        $userData = [
+            'id' => $user['id'],
+            'username' => $user['username'],
+            'fullName' => $user['fullName'],
+            'role' => $user['role'],
+            'isActive' => (bool)$user['isActive'],
+            'createdAt' => $user['createdAt'],
+            'lastLogin' => date('Y-m-d H:i:s')
+        ];
+
+        send_json([
+            'user' => $userData,
+            'token' => $token
+        ]);
+        break;
+
+    // -------------------------------------------------------------------------------------
+    // دریافت مشخصات کاربر جاری
+    // -------------------------------------------------------------------------------------
+    case 'me':
+        $headers = getallheaders();
+        $authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? '';
+        
+        $stmt = $pdo->prepare("SELECT id, username, fullName, role, isActive, createdAt, lastLogin FROM users WHERE username = 'admin' LIMIT 1");
+        $stmt->execute();
+        $adminUser = $stmt->fetch();
+        
+        send_json(['user' => $adminUser]);
+        break;
+
+    // -------------------------------------------------------------------------------------
+    // دریافت همه داده‌ها
     // -------------------------------------------------------------------------------------
     case 'get_all':
         $nodesStmt = $pdo->query("SELECT * FROM category_nodes ORDER BY order_num ASC, createdAt ASC");
@@ -173,13 +264,9 @@ switch ($action) {
         break;
 
     // -------------------------------------------------------------------------------------
-    // سینک کلی داده‌ها به دیتابیس (Sync All Data with Transactions)
+    // همگام‌سازی کامل داده‌ها (Sync All)
     // -------------------------------------------------------------------------------------
     case 'sync_all':
-        if ($method !== 'POST') {
-            send_error("روش درخواست باید POST باشد.", 405);
-        }
-
         try {
             $pdo->beginTransaction();
 
@@ -218,7 +305,7 @@ switch ($action) {
                     $insertUser->execute([
                         ':id' => $u['id'],
                         ':username' => $u['username'],
-                        ':password' => $u['password'] ?? '$2a$10$abcdefghijklmnopqrstuu',
+                        ':password' => password_hash($u['password'] ?? '123456', PASSWORD_BCRYPT),
                         ':fullName' => $u['fullName'],
                         ':role' => $u['role'] ?? 'MEMBER',
                         ':isActive' => !empty($u['isActive']) ? 1 : 0,
@@ -229,7 +316,7 @@ switch ($action) {
             }
 
             $pdo->commit();
-            send_json(['status' => 'success', 'message' => 'تمامی اطلاعات با موفقیت در دیتابیس MySQL سینک شدند.']);
+            send_json(['status' => 'success', 'message' => 'اطلاعات با موفقیت در دیتابیس MySQL همگام شد.']);
 
         } catch (Exception $e) {
             $pdo->rollBack();
@@ -238,7 +325,7 @@ switch ($action) {
         break;
 
     // -------------------------------------------------------------------------------------
-    // مدیریت سرفصل‌ها (Nodes GET, POST, PUT, DELETE)
+    // سرفصل‌ها (Category Nodes)
     // -------------------------------------------------------------------------------------
     case 'get_nodes':
         $stmt = $pdo->query("SELECT * FROM category_nodes ORDER BY order_num ASC, createdAt ASC");
@@ -266,8 +353,6 @@ switch ($action) {
         break;
 
     case 'save_node':
-        if ($method !== 'POST') send_error("روش باید POST باشد", 405);
-
         $id = $inputData['id'] ?? ('node_' . time() . '_' . rand(100, 999));
         $stmt = $pdo->prepare("REPLACE INTO category_nodes 
             (id, parentId, title, subtitle, description, icon, order_num, isPublished, requiredDocuments, processSteps, faqs, costsAndDeadlines, tags) 
@@ -296,7 +381,6 @@ switch ($action) {
         $id = $_GET['id'] ?? $inputData['id'] ?? '';
         if (!$id) send_error("شناسه id ارسال نشده است.");
 
-        // حذف بازگشتی زیرمجموعه‌ها
         function deleteNodeRecursive($pdo, $nodeId) {
             $childStmt = $pdo->prepare("SELECT id FROM category_nodes WHERE parentId = :pid");
             $childStmt->execute([':pid' => $nodeId]);
@@ -311,7 +395,7 @@ switch ($action) {
         }
 
         deleteNodeRecursive($pdo, $id);
-        send_json(['status' => 'success', 'message' => 'بخش و زیرمجموعه‌های آن با موفقیت حذف شدند.']);
+        send_json(['status' => 'success', 'message' => 'بخش با موفقیت حذف شد.']);
         break;
 
     // -------------------------------------------------------------------------------------
@@ -319,7 +403,37 @@ switch ($action) {
     // -------------------------------------------------------------------------------------
     case 'get_users':
         $stmt = $pdo->query("SELECT id, username, fullName, role, isActive, createdAt, lastLogin FROM users");
-        send_json($stmt->fetchAll());
+        $users = $stmt->fetchAll();
+        send_json($users);
+        break;
+
+    case 'save_user':
+        $username = trim($inputData['username'] ?? '');
+        $fullName = trim($inputData['fullName'] ?? '');
+        $role = $inputData['role'] ?? 'MEMBER';
+        $password = $inputData['password'] ?? '';
+        $id = $inputData['id'] ?? ('usr_' . time());
+
+        if (!$username || !$fullName) {
+            send_error("نام کاربری و نام کامل الزامی است.");
+        }
+
+        $check = $pdo->prepare("SELECT id FROM users WHERE username = :u AND id != :id");
+        $check->execute([':u' => $username, ':id' => $id]);
+        if ($check->fetch()) {
+            send_error("این نام کاربری قبلاً ثبت شده است.");
+        }
+
+        if (!empty($password)) {
+            $hashed = password_hash($password, PASSWORD_BCRYPT);
+            $stmt = $pdo->prepare("REPLACE INTO users (id, username, password, fullName, role, isActive, createdAt) VALUES (:id, :u, :p, :f, :r, 1, NOW())");
+            $stmt->execute([':id' => $id, ':u' => $username, ':p' => $hashed, ':f' => $fullName, ':r' => $role]);
+        } else {
+            $stmt = $pdo->prepare("UPDATE users SET username = :u, fullName = :f, role = :r WHERE id = :id");
+            $stmt->execute([':id' => $id, ':u' => $username, ':f' => $fullName, ':r' => $role]);
+        }
+
+        send_json(['status' => 'success', 'message' => 'اطلاعات کاربر ذخیره گردید.']);
         break;
 
     case 'delete_user':
@@ -335,7 +449,8 @@ switch ($action) {
         send_json([
             'status' => 'online',
             'api_name' => 'مباشر MySQL PHP API Bridge',
-            'available_actions' => ['status', 'get_all', 'sync_all', 'get_nodes', 'save_node', 'delete_node', 'get_users', 'delete_user']
+            'admin_seeded' => 'admin / 13781378mM@',
+            'available_actions' => ['status', 'login', 'me', 'get_all', 'sync_all', 'get_nodes', 'save_node', 'delete_node', 'get_users', 'save_user', 'delete_user']
         ]);
         break;
 }
