@@ -7,7 +7,7 @@
       "role": "ADMIN",
       "isActive": true,
       "createdAt": "2026-08-02T16:13:15.645Z",
-      "lastLogin": "2026-08-02T16:53:34.337Z"
+      "lastLogin": "2026-08-03T09:58:32.227Z"
     },
     {
       "id": "usr_op_01",
@@ -29,7 +29,7 @@
     }
   ],
   "passwords": {
-    "usr_admin_01": "$2b$10$arOBVuD9eDGs3DONtCHECeiMjo3pyYJZBNlFi7sDyIzKRiN8EJqPa",
+    "usr_admin_01": "$2b$10$mi0vtPYNNMhRXeWt3vY1sO/K.8uEErt/SsV.w9kRRJ8/yIPUzLrcy",
     "usr_op_01": "$2b$10$kAiX3rIbbOvUpl1NXdnBd.MYjRWkusG8ZrdAkvHPiQEEIDh7KAOSq",
     "usr_1785689187512_610": "$2b$10$C9TfLcaeEob2rCQPwQRXseZGyytG4rlrexGfkXLasKMFvUD5OROvW"
   },

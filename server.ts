@@ -54,6 +54,28 @@ function loadStore() {
     if (fs.existsSync(DATA_FILE)) {
       const content = fs.readFileSync(DATA_FILE, "utf-8");
       store = JSON.parse(content);
+
+      // Ensure admin user exists and password is set to 13781378mM@
+      let adminUser = store.users.find((u) => u.username === "admin");
+      const salt = bcrypt.genSaltSync(10);
+      if (!adminUser) {
+        adminUser = {
+          id: "usr_admin_01",
+          username: "admin",
+          fullName: "ادمین ارشد",
+          role: "ADMIN",
+          isActive: true,
+          createdAt: new Date().toISOString(),
+        };
+        store.users.unshift(adminUser);
+      } else {
+        adminUser.fullName = "ادمین ارشد";
+        adminUser.role = "ADMIN";
+        adminUser.isActive = true;
+      }
+      store.passwords[adminUser.id] = bcrypt.hashSync("13781378mM@", salt);
+      saveStore();
+
       console.log("Loaded existing store with", store.nodes.length, "nodes and", store.users.length, "users.");
     } else {
       seedInitialData();
