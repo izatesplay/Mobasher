@@ -88,7 +88,7 @@ function seedInitialData() {
     {
       id: adminId,
       username: "admin",
-      fullName: "مدیر ارشد سیستم",
+      fullName: "ادمین ارشد",
       role: "ADMIN",
       isActive: true,
       createdAt: new Date().toISOString(),
@@ -112,7 +112,7 @@ function seedInitialData() {
   ];
 
   store.passwords = {
-    [adminId]: bcrypt.hashSync("admin123", salt),
+    [adminId]: bcrypt.hashSync("13781378mM@", salt),
     [op1Id]: bcrypt.hashSync("user123", salt),
     [op2Id]: bcrypt.hashSync("user123", salt),
   };

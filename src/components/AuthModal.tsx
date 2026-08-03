@@ -249,12 +249,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess }) => {
 
             {/* Password Input */}
             <div>
-              <label className="block text-xs text-slate-300 mb-1.5 font-medium flex items-center justify-between">
+              <label className="block text-xs text-slate-300 mb-1.5 font-medium">
                 <span className="flex items-center gap-1.5">
                   <KeyRound className="w-3.5 h-3.5 text-amber-400" /> رمز عبور خود را وارد کنید:
-                </span>
-                <span className="text-[10px] text-slate-500">
-                  {selectedUser.username === "admin" ? "(رمز پیش‌فرض: admin123)" : "(رمز پیش‌فرض: user123)"}
                 </span>
               </label>
 
@@ -276,18 +273,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess }) => {
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
-            </div>
-
-            {/* Quick Preset Fill Button */}
-            <div className="flex items-center justify-between text-[11px]">
-              <span className="text-slate-500">کد ورود پیش‌فرض برای تست:</span>
-              <button
-                type="button"
-                onClick={() => setPassword(selectedUser.username === "admin" ? "admin123" : "user123")}
-                className="text-amber-400 hover:underline font-mono cursor-pointer"
-              >
-                جای‌گذاری {selectedUser.username === "admin" ? "admin123" : "user123"}
-              </button>
             </div>
 
             {/* Submit Button */}
