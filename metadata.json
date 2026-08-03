@@ -1,0 +1,6 @@
+{
+  "name": "سامانه مرجع محتوای کال‌سنتر مباشر",
+  "description": "سامانه اختصاصی مرجع داخلی محتوا و مدارک خدمات ثبتی، حقوقی و مالیاتی برای اعضای کال‌سنتر مباشر",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
