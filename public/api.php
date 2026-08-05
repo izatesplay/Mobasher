@@ -92,6 +92,96 @@ try {
         `timestamp` DATETIME DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;");
 
+    // چک و ایجاد محتوای اولیه حقوقی، ثبتی و مالیاتی در صورت خالی بودن دیتابیس
+    $nodeCountStmt = $pdo->query("SELECT COUNT(*) FROM category_nodes");
+    if ($nodeCountStmt && $nodeCountStmt->fetchColumn() == 0) {
+        $insertNode = $pdo->prepare("INSERT INTO category_nodes 
+            (id, parentId, title, subtitle, description, icon, order_num, isPublished, requiredDocuments, processSteps, faqs, costsAndDeadlines, tags) 
+            VALUES (:id, :parentId, :title, :subtitle, :description, :icon, :order_num, 1, :requiredDocuments, :processSteps, :faqs, :costsAndDeadlines, :tags)");
+
+        $defaultSeedNodes = [
+            [
+                'id' => 'domain_reg', 'parentId' => null, 'title' => 'خدمات ثبتی و تغییرات',
+                'subtitle' => 'ثبت شرکت‌ها، برند، کارت بازرگانی و تغییرات ثبتی',
+                'description' => 'مرجع کامل قوانین، مدارک و فرآیندهای مربوط به ثبت انواع شرکت، موسسات، علائم تجاری و کارت بازرگانی',
+                'icon' => 'Building2', 'order_num' => 1
+            ],
+            [
+                'id' => 'domain_tax', 'parentId' => null, 'title' => 'خدمات مالی و مالیاتی',
+                'subtitle' => 'اظهارنامه‌ها، دفاتر قانونی، ارزش افزوده و سامانه مؤدیان',
+                'description' => 'مرجع دقیق مدارک، مبالغ، زمان‌بندی و تکالیف قانون مالیات‌های مستقیم و ارزش افزوده برای مشتریان',
+                'icon' => 'Calculator', 'order_num' => 2
+            ],
+            [
+                'id' => 'domain_legal', 'parentId' => null, 'title' => 'خدمات حقوقی و قراردادها',
+                'subtitle' => 'تنظیم قراردادهای تجاری، مشاوره اداره کار و دعاوی تخصصی',
+                'description' => 'پروتکل‌ها و مدارک لازم جهت تنظیم انواع قراردادها، داوری و پرونده‌های حقوقی و اداره کار',
+                'icon' => 'Scale', 'order_num' => 3
+            ],
+            [
+                'id' => 'sub_company_reg', 'parentId' => 'domain_reg', 'title' => 'ثبت انواع شرکت‌ها',
+                'subtitle' => 'مسئولیت محدود، سهامی خاص، سهامی عام و موسسه غیرتجاری',
+                'description' => 'دسته‌بندی انواع شخصیت‌های حقوقی و مدارک لازم برای تشکیل پرونده ثبتی',
+                'icon' => 'FolderGit2', 'order_num' => 1
+            ],
+            [
+                'id' => 'sub_llc', 'parentId' => 'sub_company_reg', 'title' => 'شرکت با مسئولیت محدود',
+                'subtitle' => 'پرتکرارترین نوع شرکت تجاری با حداقل ۲ شریک',
+                'description' => 'در شرکت با مسئولیت محدود، مسئولیت هر یک از شرکا فقط به میزان سرمایه آنها در شرکت است.',
+                'icon' => 'ShieldCheck', 'order_num' => 1,
+                'requiredDocuments' => json_encode([
+                    ['id' => 'doc_llc_1', 'name' => 'تصویر شناسنامه و کارت ملی شرکا و مدیران', 'description' => 'کارت ملی هوشمند یا رسید ثبت‌نام کارت ملی + تمام صفحات شناسنامه', 'isMandatory' => true, 'recipientRole' => 'همه شرکا و هیئت مدیره', 'notes' => 'اطلاعات هویتی باید دقیقاً منطبق با سامانه ثنا باشد.'],
+                    ['id' => 'doc_llc_2', 'name' => 'گواهی عدم سوءپیشینه کیفری', 'description' => 'دریافت آنلاین از طریق سامانه عدل ایران (عدلیه) / ثنا در کمتر از ۲۴ ساعت', 'isMandatory' => true, 'recipientRole' => 'اعضای هیئت مدیره و بازرسین'],
+                    ['id' => 'doc_llc_3', 'name' => 'تأییدیه آدرس و کدپستی محل شرکت', 'description' => 'قبض تلفن ثابت، سند یا اجاره‌نامه با کدپستی ۱۰ رقمی معتبر', 'isMandatory' => true, 'recipientRole' => 'متقاضی']
+                ], JSON_UNESCAPED_UNICODE),
+                'processSteps' => json_encode([
+                    ['id' => 'step_llc_1', 'stepNumber' => 1, 'title' => 'مشاوره اولیه و تکمیل فرم سفارش', 'detail' => 'اخذ مشخصات شرکا، سرمایه اولیه و اسامی پیشنهادی.', 'estimatedTime' => '۱ ساعت'],
+                    ['id' => 'step_llc_2', 'stepNumber' => 2, 'title' => 'استعلام نام در اداره ثبت شرکت‌ها', 'detail' => 'ارسال اسامی پیشنهادی به کارشناس اداره ثبت جهت تأیید نام نهایی.', 'estimatedTime' => '۲۴ الی ۴۸ ساعت']
+                ], JSON_UNESCAPED_UNICODE),
+                'faqs' => json_encode([
+                    ['id' => 'faq_llc_1', 'question' => 'آیا برای ثبت شرکت با مسئولیت محدود نیاز به بلوکه کردن پول در بانک است؟', 'answer' => 'خیر، اقرار مدیرعامل به دریافت سرمایه کافی است.']
+                ], JSON_UNESCAPED_UNICODE),
+                'costsAndDeadlines' => json_encode(['governmentFee' => 'حدود ۴۵۰,۰۰۰ تومان', 'totalDuration' => '۷ الی ۱۰ روز کاری'], JSON_UNESCAPED_UNICODE),
+                'tags' => json_encode(['ثبت شرکت', 'مسئولیت محدود', 'شناسه ملی'], JSON_UNESCAPED_UNICODE)
+            ],
+            [
+                'id' => 'sub_tax_decl', 'parentId' => 'domain_tax', 'title' => 'اظهارنامه‌های مالیاتی',
+                'subtitle' => 'اظهارنامه عملکرد، ارزش افزوده و صورت معاملات فصلی (ماده ۱۶۹)',
+                'description' => 'مرجع مدارک و جرایم مالیاتی مربوط به تکالیف دوره‌ای اشخاص حقیقی و حقوقی',
+                'icon' => 'Receipt', 'order_num' => 1
+            ],
+            [
+                'id' => 'sub_moadian', 'parentId' => 'domain_tax', 'title' => 'سامانه مؤدیان و صدور صورتحساب الکترونیکی',
+                'subtitle' => 'ارسال مستقیم فاکتورهای رسمی به کارپوشه مالیاتی مشتریان',
+                'description' => 'الزام قانونی تمام اشخاص حقوقی و حقیقی صاحب کسب‌وکار برای صدور فاکتور الکترونیکی با کلید عمومی و اختصاصی.',
+                'icon' => 'QrCode', 'order_num' => 2
+            ],
+            [
+                'id' => 'sub_contracts', 'parentId' => 'domain_legal', 'title' => 'تنظیم و حقوق قراردادها',
+                'subtitle' => 'قراردادهای پیمانکاری، تجاری، مشارکتی و عدم افشا (NDA)',
+                'description' => 'تنظیم تخصصی بندهای حقوقی، فسخ، حل اختلاف، خسارت تاخیر و ضمانت اجراها',
+                'icon' => 'FileText', 'order_num' => 1
+            ]
+        ];
+
+        foreach ($defaultSeedNodes as $sn) {
+            $insertNode->execute([
+                ':id' => $sn['id'],
+                ':parentId' => $sn['parentId'],
+                ':title' => $sn['title'],
+                ':subtitle' => $sn['subtitle'] ?? '',
+                ':description' => $sn['description'] ?? '',
+                ':icon' => $sn['icon'],
+                ':order_num' => $sn['order_num'],
+                ':requiredDocuments' => $sn['requiredDocuments'] ?? '[]',
+                ':processSteps' => $sn['processSteps'] ?? '[]',
+                ':faqs' => $sn['faqs'] ?? '[]',
+                ':costsAndDeadlines' => $sn['costsAndDeadlines'] ?? '{}',
+                ':tags' => $sn['tags'] ?? '[]'
+            ]);
+        }
+    }
+
     // ایجاد یا بروزرسانی کاربر مدیر ارشد (admin / 13781378mM@)
     $adminCheck = $pdo->prepare("SELECT id FROM users WHERE username = 'admin'");
     $adminCheck->execute();

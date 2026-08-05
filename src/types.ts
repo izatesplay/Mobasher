@@ -62,7 +62,7 @@ export interface AuditLog {
   timestamp: string;
   userId: string;
   userName: string;
-  action: 'CREATE_NODE' | 'UPDATE_NODE' | 'DELETE_NODE' | 'CREATE_USER' | 'UPDATE_USER' | 'DELETE_USER' | 'RESET_PASSWORD';
+  action: 'CREATE_NODE' | 'UPDATE_NODE' | 'DELETE_NODE' | 'CREATE_USER' | 'UPDATE_USER' | 'DELETE_USER' | 'RESET_PASSWORD' | 'SYSTEM_INIT';
   details: string;
 }
 

@@ -103,17 +103,17 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess }) => {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/90 backdrop-blur-md p-4">
       <div className="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl text-slate-100 space-y-6 relative overflow-hidden">
         {/* Glowing Ambient Light */}
-        <div className="absolute top-0 right-0 w-48 h-48 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute bottom-0 left-0 w-48 h-48 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute top-0 right-0 w-48 h-48 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute bottom-0 left-0 w-48 h-48 bg-sky-500/10 rounded-full blur-3xl pointer-events-none" />
 
         {/* Brand Header with Uploaded Logo */}
         <div className="text-center space-y-3 relative z-10">
-          <div className="w-16 h-16 bg-slate-950 border border-slate-800 rounded-2xl mx-auto flex items-center justify-center shadow-xl shadow-amber-500/10 p-2.5">
+          <div className="w-16 h-16 bg-slate-950 border border-slate-800 rounded-2xl mx-auto flex items-center justify-center shadow-xl shadow-indigo-500/10 p-2.5">
             <img src="/logo.svg" alt="لوگوی مباشر" className="w-full h-full object-contain" />
           </div>
 
           <div>
-            <h1 className="text-2xl font-black text-amber-400 tracking-tight">مباشر</h1>
+            <h1 className="text-2xl font-bold text-sky-300 tracking-tight">مباشر</h1>
             <p className="text-xs text-slate-400 mt-1">
               سامانه مرجع اختصاصی محتوا و مدارک کال‌سنتر (ثبتی، مالیاتی، حقوقی)
             </p>

@@ -1,0 +1,551 @@
+import { CategoryNode, User, AuditLog } from "../types";
+
+export const INITIAL_NODES: CategoryNode[] = [
+  {
+    id: "domain_reg",
+    parentId: null,
+    title: "خدمات ثبتی و تغییرات",
+    subtitle: "ثبت شرکت‌ها، برند، کارت بازرگانی و تغییرات ثبتی",
+    description: "مرجع کامل قوانین، مدارک و فرآیندهای مربوط به ثبت انواع شرکت، موسسات، علائم تجاری و کارت بازرگانی",
+    icon: "Building2",
+    order: 1,
+    isPublished: true,
+    requiredDocuments: [],
+    processSteps: [],
+    faqs: [],
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: "domain_tax",
+    parentId: null,
+    title: "خدمات مالی و مالیاتی",
+    subtitle: "اظهارنامه‌ها، دفاتر قانونی، ارزش افزوده و سامانه مؤدیان",
+    description: "مرجع دقیق مدارک، مبالغ، زمان‌بندی و تکالیف قانون مالیات‌های مستقیم و ارزش افزوده برای مشتریان",
+    icon: "Calculator",
+    order: 2,
+    isPublished: true,
+    requiredDocuments: [],
+    processSteps: [],
+    faqs: [],
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: "domain_legal",
+    parentId: null,
+    title: "خدمات حقوقی و قراردادها",
+    subtitle: "تنظیم قراردادهای تجاری، مشاوره اداره کار و دعاوی تخصصی",
+    description: "پروتکل‌ها و مدارک لازم جهت تنظیم انواع قراردادها، داوری و پرونده‌های حقوقی و اداره کار",
+    icon: "Scale",
+    order: 3,
+    isPublished: true,
+    requiredDocuments: [],
+    processSteps: [],
+    faqs: [],
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: "sub_company_reg",
+    parentId: "domain_reg",
+    title: "ثبت انواع شرکت‌ها",
+    subtitle: "مسئولیت محدود، سهامی خاص، سهامی عام و موسسه غیرتجاری",
+    description: "دسته‌بندی انواع شخصیت‌های حقوقی و مدارک لازم برای تشکیل پرونده ثبتی",
+    icon: "FolderGit2",
+    order: 1,
+    isPublished: true,
+    requiredDocuments: [],
+    processSteps: [],
+    faqs: [],
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: "sub_llc",
+    parentId: "sub_company_reg",
+    title: "شرکت با مسئولیت محدود",
+    subtitle: "پرتکرارترین نوع شرکت تجاری با حداقل ۲ شریک",
+    description: "در شرکت با مسئولیت محدود، مسئولیت هر یک از شرکا فقط به میزان سرمایه آنها در شرکت است. نیازی به واریز پول به بانک در بدو امر ندارد.",
+    icon: "ShieldCheck",
+    order: 1,
+    isPublished: true,
+    requiredDocuments: [
+      {
+        id: "doc_llc_1",
+        name: "تصویر شناسنامه و کارت ملی شرکا و مدیران",
+        description: "کارت ملی هوشمند یا رسید ثبت‌نام کارت ملی + تمام صفحات شناسنامه",
+        isMandatory: true,
+        recipientRole: "همه شرکا و هیئت مدیره",
+        notes: "اطلاعات هویتی باید دقیقاً منطبق با سامانه ثنا باشد."
+      },
+      {
+        id: "doc_llc_2",
+        name: "گواهی عدم سوءپیشینه کیفری",
+        description: "دریافت آنلاین از طریق سامانه عدل ایران (عدلیه) / ثنا در کمتر از ۲۴ ساعت",
+        isMandatory: true,
+        recipientRole: "اعضای هیئت مدیره و بازرسین (در صورت وجود)",
+        notes: "تاریخ گواهی نباید بیشتر از ۱ ماه بگذرد."
+      },
+      {
+        id: "doc_llc_3",
+        name: "تأییدیه آدرس و کدپستی محل شرکت",
+        description: "قبض تلفن ثابت، سند یا اجاره‌نامه با کدپستی ۱۰ رقمی معتبر",
+        isMandatory: true,
+        recipientRole: "متقاضی",
+        notes: "کدپستی دقیقاً در سامانه اداره پست بررسی و استعلام می‌شود."
+      },
+      {
+        id: "doc_llc_4",
+        name: "تعیین موضوع فعالیت دقیق شرکت",
+        description: "عنوان دقیق خدمات یا بازرگانی (در صورت مجوزی بودن، اخذ مجوز از ارگان مربوطه)",
+        isMandatory: true,
+        recipientRole: "شرکا",
+        notes: "در صورت نیاز به مجوز، کارشناس مباشر استعلامات مربوطه را انجام می‌دهد."
+      },
+      {
+        id: "doc_llc_5",
+        name: "انتخاب ۵ نام پیشنهادی ۳ کلمه‌ای",
+        description: "اسامی فارسی، با معنا، غیرتکراری و بدون استفاده از اسامی ممنوعه لاتین یا عمومی",
+        isMandatory: true,
+        recipientRole: "متقاضی"
+      }
+    ],
+    processSteps: [
+      {
+        id: "step_llc_1",
+        stepNumber: 1,
+        title: "مشاوره اولیه و تکمیل فرم سفارش",
+        detail: "اخذ مشخصات شرکا، سرمایه اولیه (حداقل ۱ میلیون ریال)، درصد سهم‌الشرکه و اسامی پیشنهادی.",
+        estimatedTime: "۱ ساعت"
+      },
+      {
+        id: "step_llc_2",
+        stepNumber: 2,
+        title: "استعلام نام در اداره ثبت شرکت‌ها",
+        detail: "ارسال اسامی پیشنهادی به کارشناس اداره ثبت جهت تأیید نام نهایی.",
+        estimatedTime: "۲۴ الی ۴۸ ساعت"
+      },
+      {
+        id: "step_llc_3",
+        stepNumber: 3,
+        title: "تنظیم اوراق ثبتی (اساسنامه و شرکت‌نامه)",
+        detail: "توسط دپارتمان تخصصی مباشر و ارسال جهت امضای الکترونیک یا دستی شرکا.",
+        estimatedTime: "۱ روز کاری"
+      },
+      {
+        id: "step_llc_4",
+        stepNumber: 4,
+        title: "صدور آگهی تأسیس و روزنامه رسمی",
+        detail: "پرداخت حق‌الثبت و هزینه‌های روزنامه رسمی و دریافت شناسه ملی ۱۰ رقمی.",
+        estimatedTime: "۳ الی ۵ روز کاری"
+      }
+    ],
+    faqs: [
+      {
+        id: "faq_llc_1",
+        question: "آیا برای ثبت شرکت با مسئولیت محدود نیاز به بلوکه کردن پول در بانک است؟",
+        answer: "خیر، برخلاف شرکت سهامی خاص، در شرکت با مسئولیت محدود اقرار مدیرعامل به دریافت سرمایه کافی است و نیازی به بلوکه‌سازی یا افتتاح حساب بانکی قبل از ثبت وجود ندارد."
+      },
+      {
+        id: "faq_llc_2",
+        question: "حداقل تعداد شرکا چقدر است؟",
+        answer: "حداقل ۲ نفر که می‌توانند اعضای یک خانواده یا افراد مجزا باشند."
+      }
+    ],
+    costsAndDeadlines: {
+      governmentFee: "حدود ۴۵۰,۰۰۰ تومان (روزنامه رسمی و حق‌الثبت)",
+      serviceFee: "با تماس با کارشناس مباشر اعلام می‌گردد",
+      totalDuration: "۷ الی ۱۰ روز کاری",
+      notes: "مدت زمان بسته به سرعت تأیید نام در اداره ثبت شرکت‌ها متغیر است."
+    },
+    tags: ["ثبت شرکت", "مسئولیت محدود", "شرکت تجاری", "شناسه ملی"],
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: "sub_jsc",
+    parentId: "sub_company_reg",
+    title: "شرکت سهامی خاص",
+    subtitle: "مناسب برای شرکت در مناقصات، اخذ تسهیلات بزرگ و اعتبار بالا",
+    description: "نیازمند حداقل ۳ سهامدار و ۲ بازرس (اصلی و علی‌البدل). واریز حداقل ۳۵٪ سرمایه اولیه در حساب بانکی به نام شرکت در شرف تأسیس الزامی است.",
+    icon: "Award",
+    order: 2,
+    isPublished: true,
+    requiredDocuments: [
+      {
+        id: "doc_jsc_1",
+        name: "مدارک هویتی سهامداران و بازرسین",
+        description: "شناسنامه، کارت ملی و ثبت‌نام سامانه ثنا برای تمام ۵ نفر (۳ سهامدار + ۲ بازرس)",
+        isMandatory: true,
+        recipientRole: "همه اعضا"
+      },
+      {
+        id: "doc_jsc_2",
+        name: "گواهی بانکی واریز ۳۵٪ سرمایه",
+        description: "افتتاح حساب به نام «شرکت در شرف تأسیس» و واریز حداقل ۳۵٪ سرمایه اعلامی",
+        isMandatory: true,
+        recipientRole: "مدیرعامل / هیئت مدیره",
+        notes: "این پول تا زمان چاپ آگهی تأسیس در حساب بلوکه می‌ماند."
+      },
+      {
+        id: "doc_jsc_3",
+        name: "گواهی عدم سوءپیشینه اعضای هیئت مدیره و بازرسین",
+        description: "دریافت آنلاین از سامانه عدل ایران",
+        isMandatory: true
+      }
+    ],
+    processSteps: [
+      {
+        id: "step_jsc_1",
+        stepNumber: 1,
+        title: "اخذ گواهی عدم سوءپیشینه و تعیین اعضا",
+        detail: "تعیین بازرسین (بازرسین نباید نسبت فامیلی مستقیم با هیئت مدیره داشته باشند).",
+        estimatedTime: "۱ روز"
+      },
+      {
+        id: "step_jsc_2",
+        stepNumber: 2,
+        title: "افتتاح حساب بانکی و واریز ۳۵ درصد",
+        detail: "مراجعه به بانک با معرفی‌نامه اداره ثبت.",
+        estimatedTime: "۲ روز کاری"
+      },
+      {
+        id: "step_jsc_3",
+        stepNumber: 3,
+        title: "امضای اوراق و صدور آگهی تاسیس",
+        detail: "امضای اظهارنامه و اساسنامه سهامی خاص و درج در روزنامه رسمی.",
+        estimatedTime: "۵ الی ۷ روز"
+      }
+    ],
+    faqs: [
+      {
+        id: "faq_jsc_1",
+        question: "آیا بازرسین می‌توانند از اقوام مدیران باشند؟",
+        answer: "خیر، بازرس اصلی و علی‌البدل نباید نسبت فامیلی نسبی یا سببی درجه یک با هیئت مدیره داشته باشند."
+      }
+    ],
+    costsAndDeadlines: {
+      governmentFee: "حدود ۶۰۰,۰۰۰ تومان (حق‌الثبت و آگهی)",
+      totalDuration: "۱۰ الی ۱۲ روز کاری"
+    },
+    tags: ["سهامی خاص", "مناقصه", "بازرس", "سرمایه اولیه"],
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: "sub_brand",
+    parentId: "domain_reg",
+    title: "ثبت برند و علامت تجاری",
+    subtitle: "محافظت از نام تجاری و لوگوی کسب‌وکار در مرکز مالکیت معنوی",
+    description: "ثبت علامت تجاری به دو صورت حقیقی (به نام شخص) و حقوقی (به نام شرکت) امکان‌پذیر است.",
+    icon: "BadgeCheck",
+    order: 2,
+    isPublished: true,
+    requiredDocuments: [
+      {
+        id: "doc_br_1",
+        name: "کارت بازرگانی یا کارت عضویت اتاق بازرگانی (برای برند لاتین)",
+        description: "اگر نام برند حاوی حروف لاتین یا غیرفارسی باشد الزامی است. برای برند فارسی نیاز نیست.",
+        isMandatory: false,
+        notes: "برندهای تماماً فارسی نیازی به کارت بازرگانی ندارند."
+      },
+      {
+        id: "doc_br_2",
+        name: "جواز کسب، پروانه بهره‌برداری یا گواهی فعالیت مرتبط",
+        description: "مدرک اثبات فعالیت در طبقه مورد نظر (مثلا جواز کسب فروشگاه، پروانه ساخت یا نماد اعتماد)",
+        isMandatory: true
+      },
+      {
+        id: "doc_br_3",
+        name: "نمونه لوگو و فایل گرافیکی با کیفیت بالا",
+        description: "ابعاد ۱۰ در ۱۰ سانتی‌متر با رزولوشن ۳۰۰dpi",
+        isMandatory: true
+      }
+    ],
+    processSteps: [
+      {
+        id: "step_br_1",
+        stepNumber: 1,
+        title: "استعلام قبل از ثبت برند",
+        detail: "بررسی احتمال تشابه یا تکراری بودن نام برند در سامانه مالکیت معنوی جهت جلوگیری از رد اظهارنامه.",
+        estimatedTime: "۲ ساعت"
+      },
+      {
+        id: "step_br_2",
+        stepNumber: 2,
+        title: "تنظیم و ارسال اظهارنامه ثبت برند",
+        detail: "بارگذاری مدارک و نمونه لوگو در سامانه مرکز مالکیت معنوی.",
+        estimatedTime: "۱ روز"
+      },
+      {
+        id: "step_br_3",
+        stepNumber: 3,
+        title: "بررسی کارشناسان و آگهی نوبت اول (آگهی تقاضا)",
+        detail: "بررسی توسط ۳ کارشناس و رئیس اداره مالکیت معنوی.",
+        estimatedTime: "۳۰ الی ۴۵ روز کاری"
+      },
+      {
+        id: "step_br_4",
+        stepNumber: 4,
+        title: "مهلت ۳۰ روزه اعتراض و صدور سند ۱۰ ساله برند",
+        detail: "پس از اتمام مهلت قانون اعتراض، آگهی دوم چاپ و سند رسمی ۱۰ ساله صادر می‌شود.",
+        estimatedTime: "۳۵ روز"
+      }
+    ],
+    faqs: [
+      {
+        id: "faq_br_1",
+        question: "اعتبار برند ثبت شده چند سال است؟",
+        answer: "سند برند به مدت ۱۰ سال معتبر است و پس از آن قابل تمدید نامحدود برای دوره‌های ۱۰ ساله می‌باشد."
+      }
+    ],
+    costsAndDeadlines: {
+      totalDuration: "۲.۵ الی ۳ ماه",
+      notes: "مدت زمان قانونی بررسی اظهارنامه توسط اداره مالکیت معنوی است."
+    },
+    tags: ["ثبت برند", "علامت تجاری", "لوگو", "مالکیت معنوی"],
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: "sub_tax_decl",
+    parentId: "domain_tax",
+    title: "اظهارنامه‌های مالیاتی",
+    subtitle: "اظهارنامه عملکرد، ارزش افزوده و صورت معاملات فصلی (ماده ۱۶۹)",
+    description: "مرجع مدارک و جرایم مالیاتی مربوط به تکالیف دوره‌ای اشخاص حقیقی و حقوقی",
+    icon: "Receipt",
+    order: 1,
+    isPublished: true,
+    requiredDocuments: [],
+    processSteps: [],
+    faqs: [],
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: "sub_annual_tax",
+    parentId: "sub_tax_decl",
+    title: "اظهارنامه مالیات بر درآمد عملکرد سالانه",
+    subtitle: "موعد ارسال: تیرماه برای اشخاص حقوقی و خردادماه برای اشخاص حقیقی",
+    description: "محاسبه درآمد، هزینه‌ها و سود/زیان سال مالی گذشته و ارسال به سامانه سازمان امور مالیاتی کشور.",
+    icon: "FileSpreadsheet",
+    order: 1,
+    isPublished: true,
+    requiredDocuments: [
+      {
+        id: "doc_tax_1",
+        name: "ترازنامه و جدول سود و زیان تأیید شده",
+        description: "صورت‌های مالی استخراج شده از نرم‌افزار حسابداری معتبر",
+        isMandatory: true
+      },
+      {
+        id: "doc_tax_2",
+        name: "دفاتر پلمپ شده روزنامه و کل مربوط به سال مالی قبل",
+        description: "مربوط به سال مالی مورد گزارش با ثبت تمام تراکنش‌ها",
+        isMandatory: true
+      },
+      {
+        id: "doc_tax_3",
+        name: "گردش حساب‌های بانکی شرکت و فاکتورهای رسمی فروش و خرید",
+        description: "فایل ریز تراکنش‌های بانکی جهت انطباق با سامانه مؤدیان",
+        isMandatory: true
+      },
+      {
+        id: "doc_tax_4",
+        name: "نام کاربری و کلمه عبور سامانه ثبت نام مالیاتی (ماده ۱۶۹ / درگاه ملی)",
+        description: "اطلاعات ورود به سامانه my.tax.gov.ir",
+        isMandatory: true
+      }
+    ],
+    processSteps: [
+      {
+        id: "step_tax_1",
+        stepNumber: 1,
+        title: "جمع‌آوری اسناد و بررسی ممانعت از جرایم",
+        detail: "انطباق ریز فاکتورها، حقوق و دستمزد و گردش بانک‌ها توسط حسابرس مباشر.",
+        estimatedTime: "۲ الی ۳ روز"
+      },
+      {
+        id: "step_tax_2",
+        stepNumber: 2,
+        title: "پیش‌نویس اظهارنامه و تأیید موکل",
+        detail: "ارسال جدول محاسبه مالیات احتمالی به موکل جهت بررسی و تایید.",
+        estimatedTime: "۱ روز"
+      },
+      {
+        id: "step_tax_3",
+        stepNumber: 3,
+        title: "ارسال نهایی به سامانه سازمان امور مالیاتی و اخذ کد رهگیری",
+        detail: "صدور قبض مالیاتی و ارسال سند ارسالی نهایی.",
+        estimatedTime: "۱ روز"
+      }
+    ],
+    faqs: [
+      {
+        id: "faq_tax_1",
+        question: "جریمه عدم ارسال اظهارنامه مالیاتی چیست؟",
+        answer: "طبق ماده ۱۹۲ قانون مالیات‌های مستقیم، عدم تسلیم اظهارنامه موجب جریمه غیرقابل بخشش معادل ۳۰٪ مالیات متعلق برای اشخاص حقوقی و ۱۰٪ برای اشخاص حقیقی می‌شود."
+      }
+    ],
+    costsAndDeadlines: {
+      totalDuration: "۳ الی ۵ روز کاری",
+      notes: "بهتر است اسناد حداقل ۲ هفته قبل از اتمام مهلت قانونی تحویل گردد."
+    },
+    tags: ["مالیات عملکرد", "اظهارنامه سالانه", "سازمان امور مالیاتی", "دفاتر قانونی"],
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: "sub_moadian",
+    parentId: "domain_tax",
+    title: "سامانه مؤدیان و صدور صورتحساب الکترونیکی",
+    subtitle: "ارسال مستقیم فاکتورهای رسمی به کارپوشه مالیاتی مشتریان",
+    description: "الزام قانونی تمام اشخاص حقوقی و حقیقی صاحب کسب‌وکار برای صدور فاکتور الکترونیکی با کلید عمومی و اختصاصی.",
+    icon: "QrCode",
+    order: 2,
+    isPublished: true,
+    requiredDocuments: [
+      {
+        id: "doc_moad_1",
+        name: "گواهی امضای الکترونیک (CSR / کلید عمومی و خصوصی)",
+        description: "دریافت از مرکز صدور گواهی الکترونیکی عام (GICA)",
+        isMandatory: true
+      },
+      {
+        id: "doc_moad_2",
+        name: "شناسه یکتای حافظه مالیاتی",
+        description: "دریافت از کارپوشه مالیاتی در سامانه my.tax.gov.ir",
+        isMandatory: true
+      },
+      {
+        id: "doc_moad_3",
+        name: "کد کالا و خدمات (کد آیسیک / شناسه کالا)",
+        description: "استخراج کدهای استاندارد عمومی یا اختصاصی از سامانه stuffid",
+        isMandatory: true
+      }
+    ],
+    processSteps: [
+      {
+        id: "step_moad_1",
+        stepNumber: 1,
+        title: "اخذ توکن CSR و کلیدهای امنیتی",
+        detail: "تولید فایل کلید عمومی و خصوصی توسط نرم‌افزار تخصصی.",
+        estimatedTime: "۲ ساعت"
+      },
+      {
+        id: "step_moad_2",
+        stepNumber: 2,
+        title: "دریافت شناسه یکتا و اتصال نرم‌افزار به کارپوشه",
+        detail: "پیکربندی سامانه مؤدیان و تست ارسال فاکتور نمونه.",
+        estimatedTime: "۱ روز"
+      }
+    ],
+    faqs: [
+      {
+        id: "faq_moad_1",
+        question: "مهلت صدور و ارسال فاکتور الکترونیکی در سامانه مؤدیان چند روز است؟",
+        answer: "طبق آخرین دستورالعمل سازمان امور مالیاتی، مودیان حداکثر ۲۱ روز از تاریخ صدور فاکتور فرصت دارند آن را در سامانه ثبت نمایند."
+      }
+    ],
+    costsAndDeadlines: {
+      totalDuration: "۱ الی ۲ روز کاری"
+    },
+    tags: ["سامانه مودیان", "صورتحساب الکترونیکی", "کارپوشه", "شناسه کالا"],
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: "sub_contracts",
+    parentId: "domain_legal",
+    title: "تنظیم و حقوق قراردادها",
+    subtitle: "قراردادهای پیمانکاری، تجاری، مشارکتی و عدم افشا (NDA)",
+    description: "تنظیم تخصصی بندهای حقوقی، فسخ، حل اختلاف، خسارت تاخیر و ضمانت اجراها",
+    icon: "FileText",
+    order: 1,
+    isPublished: true,
+    requiredDocuments: [
+      {
+        id: "doc_cnt_1",
+        name: "مشخصات کامل طرفین قرارداد (حقیقی یا حقوقی)",
+        description: "شناسنامه/کارت ملی + آگهی آخرین تغییرات و حق امضا برای شرکت‌ها",
+        isMandatory: true
+      },
+      {
+        id: "doc_cnt_2",
+        name: "شرح دقیق موضوع قرارداد، تعهدات و زمان‌بندی تحویل",
+        description: "فایل مکتوب صورت‌جلسه توافقات اولیه یا پیش‌نویس خامی که بین طرفین مطرح شده",
+        isMandatory: true
+      },
+      {
+        id: "doc_cnt_3",
+        name: "شیوه‌نامه پرداخت و تضمین‌ها (چک / سفته / ضمانت‌نامه بانکی)",
+        description: "شماره چک‌ها و مشخصات صادرکننده و ظهرنویسان",
+        isMandatory: false
+      }
+    ],
+    processSteps: [
+      {
+        id: "step_cnt_1",
+        stepNumber: 1,
+        title: "جلسه نیازسنجی حقوقی با وکیل متخصص",
+        detail: "بررسی ریسک‌های قرارداد، منافع موکل و تعیین مرجع حل اختلاف (داوری یا دادگاه).",
+        estimatedTime: "۱ ساعت"
+      },
+      {
+        id: "step_cnt_2",
+        stepNumber: 2,
+        title: "تدوین پیش‌نویس اولیه قرارداد",
+        detail: "ارسال فایل نگارش شده برای موکل جهت مطالعه.",
+        estimatedTime: "۲ الی ۳ روز کاری"
+      },
+      {
+        id: "step_cnt_3",
+        stepNumber: 3,
+        title: "اصلاحات نهایی و نهایی‌سازی متن",
+        detail: "اعمال تغییرات درخواستی و تحویل نسخه‌های نهایی جهت امضا.",
+        estimatedTime: "۱ روز"
+      }
+    ],
+    faqs: [
+      {
+        id: "faq_cnt_1",
+        question: "مزیت درج شرط داوری در قرارداد چیست؟",
+        answer: "داوری باعث حل سریع‌تر اختلافات (معمولاً در کمتر از ۳ ماه) بدون نیاز به طی فرآیند طولانی دادگاه‌ها و با هزینه کمتر می‌شود."
+      }
+    ],
+    costsAndDeadlines: {
+      totalDuration: "۲ الی ۴ روز کاری"
+    },
+    tags: ["تنظیم قرارداد", "وکیل حقوقی", "شرط داوری", "ضمانت اجرا"],
+    updatedAt: new Date().toISOString()
+  }
+];
+
+export const INITIAL_USERS: User[] = [
+  {
+    id: "usr_admin_01",
+    username: "admin",
+    fullName: "ادمین ارشد",
+    role: "ADMIN",
+    isActive: true,
+    createdAt: "2026-08-01T10:00:00.000Z"
+  },
+  {
+    id: "usr_op_01",
+    username: "operator1",
+    fullName: "مریم رضایی - اپراتور ثبتی",
+    role: "MEMBER",
+    isActive: true,
+    createdAt: "2026-08-01T10:00:00.000Z"
+  },
+  {
+    id: "usr_op_02",
+    username: "operator2",
+    fullName: "علی حسینی - اپراتور حقوقی و مالیاتی",
+    role: "MEMBER",
+    isActive: true,
+    createdAt: "2026-08-01T10:00:00.000Z"
+  }
+];
+
+export const INITIAL_AUDIT_LOGS: AuditLog[] = [
+  {
+    id: "log_init_01",
+    timestamp: new Date().toISOString(),
+    userId: "usr_admin_01",
+    userName: "ادمین ارشد",
+    action: "SYSTEM_INIT",
+    details: "ایجاد اولیه ساختار محتوایی پایگاه دانش کال‌سنتر مباشر (اطلاعات ثبتی، مالیاتی و حقوقی)"
+  }
+];

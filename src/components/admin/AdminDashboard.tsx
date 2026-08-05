@@ -401,8 +401,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ nodes, onRefresh
       {/* Top Admin Navigation Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-900 border border-slate-800 p-4 rounded-2xl shadow-xl mb-4">
         <div>
-          <h1 className="text-lg font-black text-amber-400 flex items-center gap-2">
-            <Shield className="w-5 h-5 text-amber-500" />
+          <h1 className="text-lg font-bold text-sky-300 flex items-center gap-2">
+            <Shield className="w-5 h-5 text-indigo-400" />
             پنل ادمین و مدیریت ارشد «مباشر»
           </h1>
           <p className="text-xs text-slate-400 mt-1">
@@ -415,7 +415,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ nodes, onRefresh
           <button
             onClick={() => setActiveTab("content")}
             className={`flex items-center gap-1.5 text-xs font-bold px-3.5 py-2 rounded-lg transition cursor-pointer ${
-              activeTab === "content" ? "bg-amber-500 text-slate-950 shadow" : "text-slate-400 hover:text-white"
+              activeTab === "content" ? "bg-indigo-600 text-white shadow" : "text-slate-400 hover:text-white"
             }`}
           >
             <Layers className="w-4 h-4" />
@@ -424,7 +424,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ nodes, onRefresh
           <button
             onClick={() => setActiveTab("users")}
             className={`flex items-center gap-1.5 text-xs font-bold px-3.5 py-2 rounded-lg transition cursor-pointer ${
-              activeTab === "users" ? "bg-amber-500 text-slate-950 shadow" : "text-slate-400 hover:text-white"
+              activeTab === "users" ? "bg-indigo-600 text-white shadow" : "text-slate-400 hover:text-white"
             }`}
           >
             <Users className="w-4 h-4" />
@@ -433,7 +433,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ nodes, onRefresh
           <button
             onClick={() => setActiveTab("audit")}
             className={`flex items-center gap-1.5 text-xs font-bold px-3.5 py-2 rounded-lg transition cursor-pointer ${
-              activeTab === "audit" ? "bg-amber-500 text-slate-950 shadow" : "text-slate-400 hover:text-white"
+              activeTab === "audit" ? "bg-indigo-600 text-white shadow" : "text-slate-400 hover:text-white"
             }`}
           >
             <History className="w-4 h-4" />
@@ -975,7 +975,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ nodes, onRefresh
                 setUserFormData({ username: "", password: "", fullName: "", role: "MEMBER" });
                 setUserModalOpen(true);
               }}
-              className="flex items-center gap-1.5 text-xs bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-4 py-2 rounded-xl transition shadow cursor-pointer"
+              className="flex items-center gap-1.5 text-xs bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-4 py-2 rounded-xl transition shadow cursor-pointer"
             >
               <UserPlus className="w-4 h-4" />
               تعریف عضو جدید کال‌سنتر
@@ -1095,31 +1095,35 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ nodes, onRefresh
       {/* TAB 3: AUDIT LOGS */}
       {activeTab === "audit" && (
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
-          <h2 className="text-sm font-bold text-amber-400 flex items-center gap-2 pb-3 border-b border-slate-800">
-            <History className="w-5 h-5" />
+          <h2 className="text-sm font-bold text-sky-300 flex items-center gap-2 pb-3 border-b border-slate-800">
+            <History className="w-5 h-5 text-indigo-400" />
             سوابق ثبت و تغییرات سیستمی (Audit Trail)
           </h2>
 
           <div className="space-y-2">
-            {auditLogs.map((log) => (
-              <div
-                key={log.id}
-                className="bg-slate-950 p-3 rounded-xl border border-slate-800 text-xs flex items-center justify-between"
-              >
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-amber-300">{log.userName}</span>
-                    <span className="text-[10px] bg-slate-800 px-2 py-0.5 rounded text-slate-400 font-mono">
-                      {log.action}
-                    </span>
+            {(Array.isArray(auditLogs) ? auditLogs : []).length === 0 ? (
+              <p className="text-xs text-slate-400 py-6 text-center">هیچ سوابق تغییراتی هنوز ثبت نشده است.</p>
+            ) : (
+              (Array.isArray(auditLogs) ? auditLogs : []).map((log) => (
+                <div
+                  key={log.id}
+                  className="bg-slate-950 p-3 rounded-xl border border-slate-800 text-xs flex items-center justify-between"
+                >
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-sky-300">{log.userName}</span>
+                      <span className="text-[10px] bg-slate-800 px-2 py-0.5 rounded text-slate-400 font-mono">
+                        {log.action}
+                      </span>
+                    </div>
+                    <p className="text-slate-300 mt-1">{log.details}</p>
                   </div>
-                  <p className="text-slate-300 mt-1">{log.details}</p>
+                  <span className="text-[10px] text-slate-500 font-mono">
+                    {new Date(log.timestamp).toLocaleString("fa-IR")}
+                  </span>
                 </div>
-                <span className="text-[10px] text-slate-500 font-mono">
-                  {new Date(log.timestamp).toLocaleString("fa-IR")}
-                </span>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
       )}

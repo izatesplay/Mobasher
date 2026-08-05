@@ -58,7 +58,7 @@ export const AiAssistantDrawer: React.FC<AiAssistantDrawerProps> = ({ isOpen, on
               <Bot className="w-5 h-5 text-cyan-200" />
             </div>
             <div>
-              <h2 className="text-sm font-bold text-amber-400">دستیار هوشمند پاسخگویی کال‌سنتر</h2>
+              <h2 className="text-sm font-bold text-sky-300">دستیار هوشمند پاسخگویی کال‌سنتر</h2>
               <p className="text-[11px] text-slate-400">مبتنی بر قوانین و پایگاه دانش مباشر (Gemini AI)</p>
             </div>
           </div>
@@ -76,7 +76,7 @@ export const AiAssistantDrawer: React.FC<AiAssistantDrawerProps> = ({ isOpen, on
           {/* Quick suggestions */}
           <div className="space-y-2">
             <span className="text-xs text-slate-400 font-medium flex items-center gap-1">
-              <Sparkles className="w-3.5 h-3.5 text-amber-400" /> پرسش‌های متداول و آماده:
+              <Sparkles className="w-3.5 h-3.5 text-sky-300" /> پرسش‌های متداول و آماده:
             </span>
             <div className="flex flex-col gap-1.5">
               {quickPrompts.map((prompt, idx) => (

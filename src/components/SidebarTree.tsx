@@ -52,7 +52,7 @@ import {
 interface SidebarTreeProps {
   nodes: CategoryNode[];
   selectedNodeId: string | null;
-  onSelectNode: (id: string) => void;
+  onSelectNode: (id: string | null) => void;
   searchQuery: string;
   onSearchChange: (query: string) => void;
   isMobileOpen?: boolean;
@@ -418,10 +418,10 @@ export const SidebarTree: React.FC<SidebarTreeProps> = ({
       <div className="select-none">
         <div
           onClick={() => handleSelectNode(node.id)}
-          className={`group flex flex-col px-3 py-2 my-1 rounded-xl text-sm cursor-pointer transition ${
+          className={`group flex flex-col px-3 py-2 my-1 rounded-xl text-sm cursor-pointer transition border ${
             isSelected
-              ? "bg-amber-500 text-slate-950 font-bold shadow-md ring-1 ring-amber-400"
-              : "text-slate-300 hover:bg-slate-800 hover:text-white"
+              ? "bg-[#c9a050] text-[#0a0a0a] font-bold border-[#c9a050] shadow-md"
+              : "text-[#e0e0e0] bg-[#14120f] border-[rgba(201,160,80,0.15)] hover:bg-[#1a1815] hover:border-[#c9a050]/50 hover:text-white"
           }`}
           style={{ paddingRight: `${Math.max(12, level * 16)}px` }}
         >
@@ -430,8 +430,10 @@ export const SidebarTree: React.FC<SidebarTreeProps> = ({
               {hasChildren ? (
                 <button
                   onClick={(e) => toggleExpand(node.id, e)}
-                  className={`p-1 rounded-md hover:bg-slate-700/50 transition shrink-0 ${
-                    isSelected ? "text-slate-950 hover:bg-slate-950/20" : "text-slate-400"
+                  className={`p-1 rounded-md transition shrink-0 ${
+                    isSelected
+                      ? "text-[#0a0a0a] hover:bg-[#d8bf93]"
+                      : "text-[#888888] hover:bg-[#0a0a0a] hover:text-[#c9a050]"
                   }`}
                 >
                   {isExpanded ? (
@@ -446,7 +448,7 @@ export const SidebarTree: React.FC<SidebarTreeProps> = ({
 
               <span
                 className={`shrink-0 ${
-                  isSelected ? "text-slate-950" : level === 0 ? "text-amber-400" : "text-slate-400"
+                  isSelected ? "text-[#0a0a0a]" : level === 0 ? "text-[#c9a050]" : "text-[#888888]"
                 }`}
               >
                 {renderCategoryIcon(node.icon, level === 0 ? "w-4 h-4" : "w-3.5 h-3.5")}
@@ -459,15 +461,15 @@ export const SidebarTree: React.FC<SidebarTreeProps> = ({
                     query={highlightQuery}
                     highlightClass={
                       isSelected
-                        ? "bg-slate-950 text-amber-300 px-1 py-0.5 rounded"
-                        : "bg-amber-400/40 text-amber-200 px-1 py-0.5 rounded font-bold"
+                        ? "bg-[#0a0a0a] text-[#c9a050] px-1 py-0.5 rounded"
+                        : "bg-[#c9a050]/30 text-[#d8bf93] px-1 py-0.5 rounded font-bold"
                     }
                   />
                 </span>
                 {node.subtitle && (
                   <span
                     className={`text-[10px] truncate font-normal ${
-                      isSelected ? "text-slate-900" : "text-slate-400"
+                      isSelected ? "text-[#1a1815]" : "text-[#888888]"
                     }`}
                   >
                     <HighlightText
@@ -475,8 +477,8 @@ export const SidebarTree: React.FC<SidebarTreeProps> = ({
                       query={highlightQuery}
                       highlightClass={
                         isSelected
-                          ? "bg-slate-950 text-amber-300 px-0.5 rounded"
-                          : "bg-amber-400/30 text-amber-200 px-0.5 rounded"
+                          ? "bg-[#0a0a0a] text-[#c9a050] px-0.5 rounded"
+                          : "bg-[#c9a050]/30 text-[#d8bf93] px-0.5 rounded"
                       }
                     />
                   </span>
@@ -489,8 +491,8 @@ export const SidebarTree: React.FC<SidebarTreeProps> = ({
                 <span
                   className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono ${
                     isSelected
-                      ? "bg-slate-950/30 text-slate-950 border border-slate-950/40 font-bold"
-                      : "bg-slate-800 text-amber-300 border border-slate-700"
+                      ? "bg-[#0a0a0a] text-[#c9a050] border border-[#c9a050]/50 font-bold"
+                      : "bg-[#0a0a0a] text-[#c9a050] border border-[rgba(201,160,80,0.3)]"
                   }`}
                   title={`${totalDocsCount} مدرک لازم`}
                 >
@@ -502,17 +504,17 @@ export const SidebarTree: React.FC<SidebarTreeProps> = ({
 
           {/* Smart Search Match Details Badge Snippets */}
           {highlightQuery && matchInfo.matchedFields.length > 0 && (
-            <div className="mt-2 space-y-1 border-t border-slate-800/80 pt-1.5 pr-6">
+            <div className="mt-2 space-y-1 border-t border-[rgba(201,160,80,0.2)] pt-1.5 pr-6">
               {matchInfo.matchedFields.slice(0, 3).map((mf, idx) => (
                 <div
                   key={idx}
                   className={`flex items-start gap-1.5 text-[11px] px-2 py-1 rounded-lg border leading-tight ${
                     isSelected
-                      ? "bg-slate-950/80 border-slate-900 text-slate-200 font-normal"
-                      : "bg-slate-950/90 border-slate-800 text-slate-300"
+                      ? "bg-[#0a0a0a] border-[#0a0a0a] text-[#e0e0e0] font-normal"
+                      : "bg-[#0a0a0a] border-[rgba(201,160,80,0.2)] text-[#e0e0e0]"
                   }`}
                 >
-                  <span className="flex items-center gap-1 shrink-0 font-bold text-amber-400">
+                  <span className="flex items-center gap-1 shrink-0 font-bold text-[#c9a050]">
                     {mf.icon}
                     <span>{mf.label}:</span>
                   </span>
@@ -520,7 +522,7 @@ export const SidebarTree: React.FC<SidebarTreeProps> = ({
                     <HighlightText
                       text={mf.snippet}
                       query={highlightQuery}
-                      highlightClass="bg-amber-400/40 text-amber-200 px-0.5 rounded font-bold"
+                      highlightClass="bg-[#c9a050]/40 text-[#d8bf93] px-0.5 rounded font-bold"
                     />
                   </span>
                 </div>
@@ -528,7 +530,7 @@ export const SidebarTree: React.FC<SidebarTreeProps> = ({
               {matchInfo.matchedFields.length > 3 && (
                 <span
                   className={`text-[9px] font-mono pr-1 ${
-                    isSelected ? "text-slate-900 font-semibold" : "text-slate-400"
+                    isSelected ? "text-[#0a0a0a] font-semibold" : "text-[#888888]"
                   }`}
                 >
                   + {matchInfo.matchedFields.length - 3} مطابقت محتوایی دیگر...
@@ -540,7 +542,7 @@ export const SidebarTree: React.FC<SidebarTreeProps> = ({
 
         {/* Child Subtitles / Subcategories */}
         {hasChildren && isExpanded && (
-          <div className="border-r border-slate-800 my-0.5 mr-3">
+          <div className="border-r border-[rgba(201,160,80,0.2)] my-0.5 mr-3">
             {children.map((child) => (
               <TreeNodeItem key={child.id} node={child} level={level + 1} />
             ))}
@@ -553,17 +555,17 @@ export const SidebarTree: React.FC<SidebarTreeProps> = ({
   const topLevelNodes = nodeMap.get(null) || [];
 
   const treeContent = (
-    <div className="flex flex-col h-full bg-slate-900 text-slate-100">
+    <div className="flex flex-col h-full bg-[#0f0e0c] text-white">
       {/* Search & Tree Controls Header */}
-      <div className="p-3 border-b border-slate-800 space-y-2">
+      <div className="p-3 border-b border-[rgba(201,160,80,0.2)] space-y-2">
         <div className="flex items-center justify-between lg:hidden mb-1">
-          <span className="text-xs font-bold text-amber-400 flex items-center gap-1">
+          <span className="text-xs font-bold text-[#c9a050] flex items-center gap-1">
             <Layers className="w-4 h-4" /> منوی سرفصل‌های موضوعی
           </span>
           {onCloseMobile && (
             <button
               onClick={onCloseMobile}
-              className="p-1 text-slate-400 hover:text-white rounded-lg bg-slate-800"
+              className="p-1 text-[#888888] hover:text-white rounded-lg bg-[#14120f] border border-[rgba(201,160,80,0.2)]"
             >
               <X className="w-4 h-4" />
             </button>
@@ -572,18 +574,18 @@ export const SidebarTree: React.FC<SidebarTreeProps> = ({
 
         {/* Smart Search Input Box */}
         <div className="relative">
-          <Search className="w-4 h-4 text-slate-400 absolute right-3 top-2.5" />
+          <Search className="w-4 h-4 text-[#888888] absolute right-3 top-2.5" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
             placeholder="جستجوی هوشمند در موضوعات، توضیحات، مدارک و سوالات..."
-            className="w-full bg-slate-950 border border-slate-700/80 rounded-xl pr-9 pl-8 py-2 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition shadow-inner"
+            className="w-full bg-[#0a0a0a] border border-[rgba(201,160,80,0.2)] rounded-xl pr-9 pl-8 py-2 text-xs text-[#ffffff] placeholder-[#888888] focus:outline-none focus:border-[#c9a050] focus:ring-1 focus:ring-[#c9a050] transition shadow-inner"
           />
           {searchQuery && (
             <button
               onClick={() => onSearchChange("")}
-              className="absolute left-2.5 top-2.5 text-slate-400 hover:text-white p-0.5 rounded-full hover:bg-slate-800 transition"
+              className="absolute left-2.5 top-2.5 text-[#888888] hover:text-white p-0.5 rounded-full hover:bg-[#14120f] transition"
               title="پاک کردن جستجو"
             >
               <X className="w-3.5 h-3.5" />
@@ -592,16 +594,16 @@ export const SidebarTree: React.FC<SidebarTreeProps> = ({
         </div>
 
         {/* Search Results Summary & Controls */}
-        <div className="flex items-center justify-between text-[11px] text-slate-400 px-1 pt-1">
+        <div className="flex items-center justify-between text-[11px] text-[#888888] px-1 pt-1">
           {searchQuery.trim() ? (
-            <span className="flex items-center gap-1 text-emerald-400 font-bold">
-              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+            <span className="flex items-center gap-1 text-[#10b981] font-bold">
+              <Sparkles className="w-3.5 h-3.5 text-[#c9a050]" />
               {totalMatchesCount > 0
                 ? `${totalMatchesCount} سرفصل مطابقت دارد`
                 : "هیچ نتایجی یافت نشد"}
             </span>
           ) : (
-            <span className="flex items-center gap-1 text-amber-400 font-medium">
+            <span className="flex items-center gap-1 text-[#c9a050] font-medium">
               <Layers className="w-3.5 h-3.5" /> ساختار خدمات
             </span>
           )}
@@ -609,14 +611,14 @@ export const SidebarTree: React.FC<SidebarTreeProps> = ({
           <div className="flex items-center gap-2">
             <button
               onClick={expandAll}
-              className="hover:text-amber-300 transition cursor-pointer"
+              className="hover:text-[#d8bf93] transition cursor-pointer"
             >
               باز کردن همه
             </button>
             <span>•</span>
             <button
               onClick={collapseAll}
-              className="hover:text-amber-300 transition cursor-pointer"
+              className="hover:text-[#d8bf93] transition cursor-pointer"
             >
               بستن همه
             </button>
@@ -626,20 +628,39 @@ export const SidebarTree: React.FC<SidebarTreeProps> = ({
 
       {/* Tree Content Area */}
       <div className="flex-1 overflow-y-auto p-2 space-y-1 custom-scrollbar">
+        {/* Main Center Domains Quick Link */}
+        <button
+          onClick={() => {
+            onSelectNode(null);
+            if (onCloseMobile) onCloseMobile();
+          }}
+          className={`w-full flex items-center justify-between p-2.5 rounded-xl text-xs font-bold transition mb-2 border cursor-pointer ${
+            selectedNodeId === null
+              ? "bg-[#c9a050] text-[#0a0a0a] border-[#c9a050] shadow-md"
+              : "bg-[#14120f] hover:bg-[#1a1815] text-[#c9a050] border-[rgba(201,160,80,0.2)]"
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            <Layers className="w-4 h-4 text-[#c9a050]" />
+            <span>صفحه اصلی (حوزه‌های خدمات)</span>
+          </div>
+          <ChevronLeft className="w-3.5 h-3.5 text-[#888888]" />
+        </button>
+
         {topLevelNodes.length === 0 ? (
-          <div className="p-4 text-center text-xs text-slate-500">
+          <div className="p-4 text-center text-xs text-[#888888]">
             هیچ حوزه یا خدمت منتشرشده‌ای یافت نشد.
           </div>
         ) : searchQuery.trim() && totalMatchesCount === 0 ? (
-          <div className="p-6 text-center text-xs text-slate-400 space-y-2">
-            <Search className="w-8 h-8 text-slate-600 mx-auto" />
-            <p className="font-bold text-slate-300">موردی با عبارت «{searchQuery}» یافت نشد.</p>
-            <p className="text-[11px] text-slate-500">
+          <div className="p-6 text-center text-xs text-[#e0e0e0] space-y-2">
+            <Search className="w-8 h-8 text-[#888888] mx-auto" />
+            <p className="font-bold text-[#ffffff]">موردی با عبارت «{searchQuery}» یافت نشد.</p>
+            <p className="text-[11px] text-[#888888]">
               جستجو در عنوان، توضیحات، مدارک، مراحل، سوالات متداول و برچسب‌ها انجام شد.
             </p>
             <button
               onClick={() => onSearchChange("")}
-              className="mt-2 text-xs text-amber-400 hover:underline inline-block font-semibold"
+              className="mt-2 text-xs text-[#c9a050] hover:underline inline-block font-semibold"
             >
               پاک کردن فیلتر جستجو
             </button>
@@ -650,11 +671,11 @@ export const SidebarTree: React.FC<SidebarTreeProps> = ({
       </div>
 
       {/* Bottom info badge */}
-      <div className="p-3 bg-slate-950/60 border-t border-slate-800/80 text-[11px] text-slate-400 flex items-center justify-between">
+      <div className="p-3 bg-[#0a0a0a] border-t border-[rgba(201,160,80,0.2)] text-[11px] text-[#888888] flex items-center justify-between">
         <span className="flex items-center gap-1">
-          <Sparkles className="w-3 h-3 text-amber-400" /> سیستم جستجوی هوشمند
+          <Sparkles className="w-3 h-3 text-[#c9a050]" /> سیستم جستجوی هوشمند
         </span>
-        <span className="font-mono text-[10px] text-slate-500">{nodes.length} سرفصل</span>
+        <span className="font-mono text-[10px] text-[#888888]">{nodes.length} سرفصل</span>
       </div>
     </div>
   );
@@ -662,7 +683,7 @@ export const SidebarTree: React.FC<SidebarTreeProps> = ({
   return (
     <>
       {/* Desktop Sticky Sidebar */}
-      <aside className="hidden lg:flex flex-col w-80 bg-slate-900 border-l border-slate-800 h-[calc(100vh-4rem)] sticky top-16 shadow-inner shrink-0">
+      <aside className="hidden lg:flex flex-col w-80 bg-[#0f0e0c] border-l border-[rgba(201,160,80,0.2)] h-[calc(100vh-4rem)] sticky top-16 shadow-inner shrink-0">
         {treeContent}
       </aside>
 

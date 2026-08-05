@@ -51,10 +51,6 @@ export function App() {
     try {
       const data = await api.getNodes();
       setNodes(data);
-      // Select first node if none selected
-      if (data.length > 0 && !selectedNodeId) {
-        setSelectedNodeId(data[0].id);
-      }
     } catch (err) {
       console.error("Error fetching nodes:", err);
     }
@@ -75,8 +71,8 @@ export function App() {
   if (isAuthChecking) {
     return (
       <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center space-y-4 font-sans">
-        <div className="w-10 h-10 border-4 border-amber-500 border-t-transparent rounded-full animate-spin" />
-        <p className="text-xs text-amber-400 font-bold animate-pulse">در حال بارگذاری مرجع محتوای مباشر...</p>
+        <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+        <p className="text-xs text-sky-400 font-bold animate-pulse">در حال بارگذاری مرجع محتوای مباشر...</p>
       </div>
     );
   }
@@ -85,7 +81,7 @@ export function App() {
     return <AuthModal onLoginSuccess={handleLoginSuccess} />;
   }
 
-  const selectedNode = nodes.find((n) => n.id === selectedNodeId) || nodes[0] || null;
+  const selectedNode = selectedNodeId ? nodes.find((n) => n.id === selectedNodeId) || null : null;
 
   return (
     <div dir="rtl" className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans select-none">
@@ -97,6 +93,7 @@ export function App() {
         onToggleView={(mode) => setViewMode(mode)}
         onOpenAiAssistant={() => setIsAiDrawerOpen(true)}
         onToggleMobileMenu={() => setIsMobileMenuOpen((prev) => !prev)}
+        onGoHome={() => setSelectedNodeId(null)}
       />
 
       {/* Main Workspace */}

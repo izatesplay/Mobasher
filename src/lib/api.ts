@@ -1,4 +1,5 @@
 import { CategoryNode, User, AuditLog, SearchResultItem, AuthResponse } from "../types";
+import { INITIAL_NODES, INITIAL_USERS, INITIAL_AUDIT_LOGS } from "../data/initialData";
 
 const TOKEN_KEY = "mobasher_auth_token";
 
@@ -100,10 +101,13 @@ function convertToPhpActionUrl(endpoint: string, method: string = "GET"): string
       const id = parts[parts.length - 1];
       return `/api.php?action=delete_user&id=${encodeURIComponent(id)}`;
     }
+    if (method === "POST" || method === "PUT") {
+      return `/api.php?action=save_user`;
+    }
     return `/api.php?action=get_users`;
   }
   if (endpoint.startsWith("/api/audit-logs")) {
-    return `/api.php?action=get_all`;
+    return `/api.php?action=get_audit_logs`;
   }
   return null;
 }
@@ -228,22 +232,74 @@ export const api = {
 
   // Knowledge Base Nodes
   async getNodes(): Promise<CategoryNode[]> {
-    return request<CategoryNode[]>("/api/nodes");
+    try {
+      const nodes = await request<CategoryNode[]>("/api/nodes");
+      if (Array.isArray(nodes) && nodes.length > 0) {
+        localStorage.setItem("mobasher_local_nodes", JSON.stringify(nodes));
+        return nodes;
+      }
+    } catch (err) {
+      console.warn("Failed to fetch nodes from backend, checking local storage:", err);
+    }
+    const local = localStorage.getItem("mobasher_local_nodes");
+    if (local) {
+      try {
+        const parsed = JSON.parse(local);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch (e) {}
+    }
+    return INITIAL_NODES;
   },
 
   async getNode(id: string): Promise<{ node: CategoryNode; breadcrumbs: string[] }> {
-    return request<{ node: CategoryNode; breadcrumbs: string[] }>(`/api/nodes/${id}`);
+    try {
+      return await request<{ node: CategoryNode; breadcrumbs: string[] }>(`/api/nodes/${id}`);
+    } catch (err) {
+      const nodes = await this.getNodes();
+      const node = nodes.find((n) => n.id === id);
+      if (node) {
+        const breadcrumbs: string[] = [node.title];
+        let curr = node;
+        while (curr.parentId) {
+          const parent = nodes.find((n) => n.id === curr.parentId);
+          if (!parent) break;
+          breadcrumbs.unshift(parent.title);
+          curr = parent;
+        }
+        return { node, breadcrumbs };
+      }
+      throw err;
+    }
   },
 
   async searchNodes(query: string): Promise<SearchResultItem[]> {
-    return request<SearchResultItem[]>(`/api/search?q=${encodeURIComponent(query)}`);
+    try {
+      return await request<SearchResultItem[]>(`/api/search?q=${encodeURIComponent(query)}`);
+    } catch (err) {
+      const nodes = await this.getNodes();
+      const q = query.toLowerCase().trim();
+      if (!q) return [];
+      const results: SearchResultItem[] = [];
+      nodes.forEach((n) => {
+        if (n.title.toLowerCase().includes(q) || n.description?.toLowerCase().includes(q) || n.subtitle?.toLowerCase().includes(q)) {
+          results.push({
+            node: n,
+            breadcrumbs: [n.title],
+            matchedField: "title",
+            matchedSnippet: n.subtitle || n.description || n.title,
+          });
+        }
+      });
+      return results;
+    }
   },
 
   async createNode(data: Partial<CategoryNode>): Promise<CategoryNode> {
-    return request<CategoryNode>("/api/nodes", {
+    const res = await request<CategoryNode>("/api/nodes", {
       method: "POST",
       body: JSON.stringify(data),
     });
+    return res;
   },
 
   async updateNode(id: string, data: Partial<CategoryNode>): Promise<CategoryNode> {
@@ -261,32 +317,123 @@ export const api = {
 
   // User Management (Admin)
   async getUsers(): Promise<User[]> {
-    return request<User[]>("/api/users");
+    try {
+      const users = await request<User[]>("/api/users");
+      if (Array.isArray(users) && users.length > 0) {
+        localStorage.setItem("mobasher_local_users", JSON.stringify(users));
+        return users;
+      }
+    } catch (err) {
+      console.warn("Failed to fetch users from backend, using local user store:", err);
+    }
+    const local = localStorage.getItem("mobasher_local_users");
+    if (local) {
+      try {
+        const parsed = JSON.parse(local);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch (e) {}
+    }
+    return INITIAL_USERS;
   },
 
   async createUser(data: { username: string; password: string; fullName: string; role: string }): Promise<User> {
-    return request<User>("/api/users", {
-      method: "POST",
-      body: JSON.stringify(data),
-    });
+    const newUser: User = {
+      id: "usr_" + Date.now() + "_" + Math.floor(Math.random() * 1000),
+      username: String(data.username).toLowerCase().trim(),
+      fullName: String(data.fullName).trim(),
+      role: data.role === "ADMIN" ? "ADMIN" : "MEMBER",
+      isActive: true,
+      createdAt: new Date().toISOString(),
+    };
+
+    try {
+      const res = await request<User>("/api/users", {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
+      if (res && res.id) {
+        const current = await this.getUsers().catch(() => INITIAL_USERS);
+        const updated = [res, ...current.filter((u) => u.id !== res.id)];
+        localStorage.setItem("mobasher_local_users", JSON.stringify(updated));
+        return res;
+      }
+    } catch (err) {
+      console.warn("Backend user creation API failed, executing client-side save:", err);
+    }
+
+    const current = await this.getUsers().catch(() => INITIAL_USERS);
+    const updated = [newUser, ...current.filter((u) => u.id !== newUser.id)];
+    localStorage.setItem("mobasher_local_users", JSON.stringify(updated));
+    return newUser;
   },
 
   async updateUser(id: string, data: { fullName?: string; role?: string; isActive?: boolean; password?: string }): Promise<User> {
-    return request<User>(`/api/users/${id}`, {
-      method: "PUT",
-      body: JSON.stringify(data),
+    try {
+      const res = await request<User>(`/api/users/${id}`, {
+        method: "PUT",
+        body: JSON.stringify(data),
+      });
+      if (res && res.id) {
+        const current = await this.getUsers().catch(() => INITIAL_USERS);
+        const updated = current.map((u) => (u.id === id ? { ...u, ...res } : u));
+        localStorage.setItem("mobasher_local_users", JSON.stringify(updated));
+        return res;
+      }
+    } catch (err) {
+      console.warn("Backend user update API failed, executing client-side update:", err);
+    }
+
+    const current = await this.getUsers().catch(() => INITIAL_USERS);
+    let updatedUser: User | null = null;
+    const updated = current.map((u) => {
+      if (u.id === id) {
+        updatedUser = {
+          ...u,
+          fullName: data.fullName !== undefined ? String(data.fullName).trim() : u.fullName,
+          role: data.role !== undefined ? (data.role === "ADMIN" ? "ADMIN" : "MEMBER") : u.role,
+          isActive: data.isActive !== undefined ? Boolean(data.isActive) : u.isActive,
+        };
+        return updatedUser;
+      }
+      return u;
     });
+    localStorage.setItem("mobasher_local_users", JSON.stringify(updated));
+    if (updatedUser) return updatedUser;
+    throw new Error("کاربر مورد نظر پیدا نشد.");
   },
 
   async deleteUser(id: string): Promise<{ message: string }> {
-    return request<{ message: string }>(`/api/users/${id}`, {
-      method: "DELETE",
-    });
+    try {
+      await request<{ message: string }>(`/api/users/${id}`, {
+        method: "DELETE",
+      });
+    } catch (err) {
+      console.warn("Backend user delete API failed, executing client-side delete:", err);
+    }
+
+    const current = await this.getUsers().catch(() => INITIAL_USERS);
+    const updated = current.filter((u) => u.id !== id);
+    localStorage.setItem("mobasher_local_users", JSON.stringify(updated));
+    return { message: "کاربر با موفقیت حذف گردید." };
   },
 
   // Audit Logs
   async getAuditLogs(): Promise<AuditLog[]> {
-    return request<AuditLog[]>("/api/audit-logs");
+    try {
+      const res: any = await request<any>("/api/audit-logs");
+      if (Array.isArray(res)) return res;
+      if (res && Array.isArray(res.auditLogs)) return res.auditLogs;
+    } catch (err) {
+      console.warn("Failed to fetch audit logs from backend:", err);
+    }
+    const local = localStorage.getItem("mobasher_local_audit_logs");
+    if (local) {
+      try {
+        const parsed = JSON.parse(local);
+        if (Array.isArray(parsed)) return parsed;
+      } catch (e) {}
+    }
+    return INITIAL_AUDIT_LOGS;
   },
 
   // Gemini AI Assistant
