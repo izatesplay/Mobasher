@@ -1,21 +1,26 @@
 import React, { useState, useEffect } from "react";
 import { User, CategoryNode } from "./types";
 import { api } from "./lib/api";
+import { useTheme } from "./context/ThemeContext";
 import { Header } from "./components/Header";
 import { SidebarTree } from "./components/SidebarTree";
 import { NodeContentViewer } from "./components/NodeContentViewer";
 import { AdminDashboard } from "./components/admin/AdminDashboard";
 import { AuthModal } from "./components/AuthModal";
 import { AiAssistantDrawer } from "./components/AiAssistantDrawer";
-import { Bot, Layers, Sparkles } from "lucide-react";
+import { Bot } from "lucide-react";
 
 export function App() {
+  const { isDark } = useTheme();
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isAuthChecking, setIsAuthChecking] = useState(true);
 
   // Nodes Data
   const [nodes, setNodes] = useState<CategoryNode[]>([]);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [selectedTargetTab, setSelectedTargetTab] = useState<
+    "subcategories" | "documents" | "process" | "faqs" | undefined
+  >(undefined);
   const [searchQuery, setSearchQuery] = useState("");
 
   // Views & UI Drawers
@@ -66,13 +71,36 @@ export function App() {
     setCurrentUser(null);
     setNodes([]);
     setSelectedNodeId(null);
+    setSelectedTargetTab(undefined);
+  };
+
+  const handleSelectNode = (
+    id: string | null,
+    targetTab?: "subcategories" | "documents" | "process" | "faqs"
+  ) => {
+    setSelectedNodeId(id);
+    setSelectedTargetTab(targetTab);
   };
 
   if (isAuthChecking) {
     return (
-      <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center space-y-4 font-sans">
-        <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
-        <p className="text-xs text-sky-400 font-bold animate-pulse">در حال بارگذاری مرجع محتوای مباشر...</p>
+      <div
+        className={`min-h-screen flex flex-col items-center justify-center space-y-4 font-sans ${
+          isDark ? "bg-[#0a0a0a] text-white" : "bg-slate-50 text-slate-900"
+        }`}
+      >
+        <div
+          className={`w-10 h-10 border-4 border-t-transparent rounded-full animate-spin ${
+            isDark ? "border-[#c9a050]" : "border-[#0b216f]"
+          }`}
+        />
+        <p
+          className={`text-xs font-bold animate-pulse ${
+            isDark ? "text-[#c9a050]" : "text-[#0b216f]"
+          }`}
+        >
+          در حال بارگذاری مرجع محتوای مباشر...
+        </p>
       </div>
     );
   }
@@ -84,7 +112,12 @@ export function App() {
   const selectedNode = selectedNodeId ? nodes.find((n) => n.id === selectedNodeId) || null : null;
 
   return (
-    <div dir="rtl" className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans select-none">
+    <div
+      dir="rtl"
+      className={`min-h-screen flex flex-col font-sans transition-colors duration-200 ${
+        isDark ? "bg-[#0a0a0a] text-white" : "bg-[#f8fafc] text-slate-900"
+      }`}
+    >
       {/* Header */}
       <Header
         user={currentUser}
@@ -93,7 +126,7 @@ export function App() {
         onToggleView={(mode) => setViewMode(mode)}
         onOpenAiAssistant={() => setIsAiDrawerOpen(true)}
         onToggleMobileMenu={() => setIsMobileMenuOpen((prev) => !prev)}
-        onGoHome={() => setSelectedNodeId(null)}
+        onGoHome={() => handleSelectNode(null)}
       />
 
       {/* Main Workspace */}
@@ -106,7 +139,7 @@ export function App() {
             <SidebarTree
               nodes={nodes}
               selectedNodeId={selectedNodeId}
-              onSelectNode={(id) => setSelectedNodeId(id)}
+              onSelectNode={handleSelectNode}
               searchQuery={searchQuery}
               onSearchChange={(q) => setSearchQuery(q)}
               isMobileOpen={isMobileMenuOpen}
@@ -114,12 +147,16 @@ export function App() {
             />
 
             {/* Content Display Area */}
-            <NodeContentViewer
-              node={selectedNode}
-              allNodes={nodes}
-              onSelectNode={(id) => setSelectedNodeId(id)}
-              onOpenAiAssistant={() => setIsAiDrawerOpen(true)}
-            />
+            <div className="flex-1 overflow-y-auto custom-scrollbar">
+              <NodeContentViewer
+                node={selectedNode}
+                allNodes={nodes}
+                onSelectNode={handleSelectNode}
+                onOpenAiAssistant={() => setIsAiDrawerOpen(true)}
+                searchQuery={searchQuery}
+                targetTab={selectedTargetTab}
+              />
+            </div>
           </>
         )}
       </main>
@@ -127,14 +164,18 @@ export function App() {
       {/* Floating AI Assistant Trigger Button (Bottom Left) */}
       <button
         onClick={() => setIsAiDrawerOpen(true)}
-        className="fixed bottom-6 left-6 z-40 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white p-3.5 rounded-2xl shadow-2xl border border-cyan-400/30 flex items-center gap-2 group transition hover:scale-105 cursor-pointer"
+        className={`fixed bottom-6 left-6 z-40 p-3.5 rounded-2xl shadow-xl flex items-center gap-2.5 transition hover:scale-105 cursor-pointer border ${
+          isDark
+            ? "bg-[#c9a050] hover:bg-[#d8bf93] text-[#0a0a0a] border-[#c9a050]"
+            : "bg-[#0b216f] hover:bg-blue-900 text-white border-[#0b216f]"
+        }`}
         title="دستیار هوشمند پاسخگویی کال‌سنتر"
       >
         <div className="relative">
-          <Bot className="w-5 h-5 text-cyan-200" />
+          <Bot className="w-5 h-5" />
           <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-amber-400 rounded-full animate-ping" />
         </div>
-        <span className="text-xs font-bold text-slate-100 hidden sm:inline">دستیار هوشمند AI</span>
+        <span className="text-xs font-bold hidden sm:inline">دستیار هوشمند AI</span>
       </button>
 
       {/* AI Assistant Drawer */}

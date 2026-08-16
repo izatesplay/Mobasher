@@ -1,13 +1,18 @@
 import React, { useState, useMemo } from "react";
 import { CategoryNode } from "../types";
+import { useTheme } from "../context/ThemeContext";
+import {
+  getNodeSearchMatch,
+  HighlightText,
+  MatchDetail,
+  NodeSearchMatch,
+} from "../lib/searchUtils";
 import {
   Folder,
-  FolderOpen,
   ChevronLeft,
   ChevronDown,
   Search,
   Building2,
-  Building,
   Calculator,
   Scale,
   FileText,
@@ -38,9 +43,7 @@ import {
   TrendingUp,
   Stamp,
   Globe,
-  Lock,
   FileCheck2,
-  Menu,
   X,
   FileCheck,
   HelpCircle,
@@ -52,7 +55,7 @@ import {
 interface SidebarTreeProps {
   nodes: CategoryNode[];
   selectedNodeId: string | null;
-  onSelectNode: (id: string | null) => void;
+  onSelectNode: (id: string | null, targetTab?: "subcategories" | "documents" | "process" | "faqs") => void;
   searchQuery: string;
   onSearchChange: (query: string) => void;
   isMobileOpen?: boolean;
@@ -129,179 +132,6 @@ export const renderCategoryIcon = (iconName?: string, className = "w-4 h-4") => 
   }
 };
 
-// Component for highlighting matching search text
-const HighlightText: React.FC<{ text?: string; query: string; className?: string; highlightClass?: string }> = ({
-  text,
-  query,
-  className = "",
-  highlightClass = "bg-amber-400/40 text-amber-200 px-0.5 rounded font-bold",
-}) => {
-  if (!text) return null;
-  const q = query.trim();
-  if (!q) return <span className={className}>{text}</span>;
-
-  try {
-    const escapedQuery = q.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
-    const regex = new RegExp(`(${escapedQuery})`, "gi");
-    const parts = text.split(regex);
-
-    return (
-      <span className={className}>
-        {parts.map((part, i) =>
-          part.toLowerCase() === q.toLowerCase() ? (
-            <mark key={i} className={highlightClass}>
-              {part}
-            </mark>
-          ) : (
-            part
-          )
-        )}
-      </span>
-    );
-  } catch (e) {
-    return <span className={className}>{text}</span>;
-  }
-};
-
-// Helper interface for detailed node search matches
-interface MatchDetail {
-  type: "description" | "document" | "step" | "faq" | "tag" | "cost";
-  label: string;
-  icon: React.ReactNode;
-  snippet: string;
-}
-
-interface NodeSearchMatch {
-  selfMatches: boolean;
-  matchedFields: MatchDetail[];
-}
-
-function getNodeSearchMatch(node: CategoryNode, query: string): NodeSearchMatch {
-  const q = query.trim().toLowerCase();
-  if (!q) {
-    return { selfMatches: true, matchedFields: [] };
-  }
-
-  let selfMatches = false;
-  const matchedFields: MatchDetail[] = [];
-
-  // Title & Subtitle match
-  if (node.title.toLowerCase().includes(q)) {
-    selfMatches = true;
-  }
-  if (node.subtitle && node.subtitle.toLowerCase().includes(q)) {
-    selfMatches = true;
-  }
-
-  // Description match
-  if (node.description && node.description.toLowerCase().includes(q)) {
-    selfMatches = true;
-    matchedFields.push({
-      type: "description",
-      label: "متن توضیحات",
-      icon: <FileText className="w-3 h-3 text-cyan-400 shrink-0" />,
-      snippet: getSnippetAroundMatch(node.description, q),
-    });
-  }
-
-  // Required Documents match
-  if (node.requiredDocuments && Array.isArray(node.requiredDocuments)) {
-    node.requiredDocuments.forEach((doc) => {
-      const inName = doc.name.toLowerCase().includes(q);
-      const inDesc = doc.description && doc.description.toLowerCase().includes(q);
-      const inNotes = doc.notes && doc.notes.toLowerCase().includes(q);
-      if (inName || inDesc || inNotes) {
-        selfMatches = true;
-        const text = doc.name + (doc.notes ? ` (${doc.notes})` : "");
-        matchedFields.push({
-          type: "document",
-          label: "مدرک",
-          icon: <FileCheck className="w-3 h-3 text-emerald-400 shrink-0" />,
-          snippet: text,
-        });
-      }
-    });
-  }
-
-  // Process Steps match
-  if (node.processSteps && Array.isArray(node.processSteps)) {
-    node.processSteps.forEach((step) => {
-      const inTitle = step.title.toLowerCase().includes(q);
-      const inDetail = step.detail && step.detail.toLowerCase().includes(q);
-      if (inTitle || inDetail) {
-        selfMatches = true;
-        matchedFields.push({
-          type: "step",
-          label: `مرحله ${step.stepNumber}`,
-          icon: <ListOrdered className="w-3 h-3 text-blue-400 shrink-0" />,
-          snippet: `${step.title}${step.detail ? `: ${step.detail}` : ""}`,
-        });
-      }
-    });
-  }
-
-  // FAQs match
-  if (node.faqs && Array.isArray(node.faqs)) {
-    node.faqs.forEach((faq) => {
-      const inQ = faq.question.toLowerCase().includes(q);
-      const inA = faq.answer && faq.answer.toLowerCase().includes(q);
-      if (inQ || inA) {
-        selfMatches = true;
-        matchedFields.push({
-          type: "faq",
-          label: "سوال متداول",
-          icon: <HelpCircle className="w-3 h-3 text-amber-400 shrink-0" />,
-          snippet: faq.question,
-        });
-      }
-    });
-  }
-
-  // Tags match
-  if (node.tags && Array.isArray(node.tags)) {
-    node.tags.forEach((tag) => {
-      if (tag.toLowerCase().includes(q)) {
-        selfMatches = true;
-        matchedFields.push({
-          type: "tag",
-          label: "برچسب",
-          icon: <Tag className="w-3 h-3 text-purple-400 shrink-0" />,
-          snippet: `#${tag}`,
-        });
-      }
-    });
-  }
-
-  // Costs & Deadlines match
-  if (node.costsAndDeadlines) {
-    const cd = node.costsAndDeadlines;
-    const combined = [cd.governmentFee, cd.serviceFee, cd.totalDuration, cd.notes].filter(Boolean).join(" ");
-    if (combined.toLowerCase().includes(q)) {
-      selfMatches = true;
-      matchedFields.push({
-        type: "cost",
-        label: "هزینه/زمان",
-        icon: <DollarSign className="w-3 h-3 text-green-400 shrink-0" />,
-        snippet: getSnippetAroundMatch(combined, q),
-      });
-    }
-  }
-
-  return { selfMatches, matchedFields };
-}
-
-function getSnippetAroundMatch(fullText: string, query: string, maxLength = 60): string {
-  const idx = fullText.toLowerCase().indexOf(query.toLowerCase());
-  if (idx === -1) return fullText.slice(0, maxLength);
-
-  const start = Math.max(0, idx - 15);
-  const end = Math.min(fullText.length, idx + query.length + 35);
-  let snippet = fullText.slice(start, end);
-  if (start > 0) snippet = "..." + snippet;
-  if (end < fullText.length) snippet = snippet + "...";
-  return snippet;
-}
-
 export const SidebarTree: React.FC<SidebarTreeProps> = ({
   nodes,
   selectedNodeId,
@@ -311,6 +141,8 @@ export const SidebarTree: React.FC<SidebarTreeProps> = ({
   isMobileOpen,
   onCloseMobile,
 }) => {
+  const { isDark } = useTheme();
+
   // Track open/collapsed node IDs
   const [expandedNodeIds, setExpandedNodeIds] = useState<Record<string, boolean>>({
     domain_reg: true,
@@ -356,7 +188,7 @@ export const SidebarTree: React.FC<SidebarTreeProps> = ({
     return map;
   }, [nodes]);
 
-  // Check if a node or its children match search query
+  // Deep search match evaluator with caching
   const checkTreeMatch = useMemo(() => {
     const matchCache = new Map<string, NodeSearchMatch>();
 
@@ -390,8 +222,8 @@ export const SidebarTree: React.FC<SidebarTreeProps> = ({
     return count;
   }, [nodes, searchQuery, checkTreeMatch]);
 
-  const handleSelectNode = (id: string) => {
-    onSelectNode(id);
+  const handleSelectNode = (id: string, targetTab?: "subcategories" | "documents" | "process" | "faqs") => {
+    onSelectNode(id, targetTab);
     if (onCloseMobile) {
       onCloseMobile();
     }
@@ -412,34 +244,43 @@ export const SidebarTree: React.FC<SidebarTreeProps> = ({
     }
 
     const totalDocsCount = node.requiredDocuments ? node.requiredDocuments.length : 0;
+    const totalFaqsCount = node.faqs ? node.faqs.length : 0;
     const highlightQuery = searchQuery.trim();
 
     return (
       <div className="select-none">
         <div
-          onClick={() => handleSelectNode(node.id)}
-          className={`group flex flex-col px-3 py-2 my-1 rounded-xl text-sm cursor-pointer transition border ${
+          onClick={() => handleSelectNode(node.id, matchInfo.bestTab)}
+          className={`group flex flex-col px-3.5 py-2.5 my-1 rounded-2xl cursor-pointer transition-all border ${
             isSelected
-              ? "bg-[#c9a050] text-[#0a0a0a] font-bold border-[#c9a050] shadow-md"
-              : "text-[#e0e0e0] bg-[#14120f] border-[rgba(201,160,80,0.15)] hover:bg-[#1a1815] hover:border-[#c9a050]/50 hover:text-white"
+              ? isDark
+                ? "bg-[#c9a050] text-[#0a0a0a] font-bold border-[#c9a050] shadow-md"
+                : "bg-[#0b216f] text-white font-bold border-[#0b216f] shadow-md"
+              : isDark
+              ? "text-[#e0e0e0] bg-[#14120f] border-[rgba(201,160,80,0.15)] hover:bg-[#1a1815] hover:border-[#c9a050]/50 hover:text-white"
+              : "text-slate-800 bg-white border-slate-200 hover:bg-blue-50/70 hover:border-blue-300 shadow-xs"
           }`}
           style={{ paddingRight: `${Math.max(12, level * 16)}px` }}
         >
           <div className="flex items-center justify-between min-w-0">
-            <div className="flex items-center gap-2 min-w-0 flex-1">
+            <div className="flex items-center gap-2.5 min-w-0 flex-1">
               {hasChildren ? (
                 <button
                   onClick={(e) => toggleExpand(node.id, e)}
-                  className={`p-1 rounded-md transition shrink-0 ${
+                  className={`p-1 rounded-lg transition shrink-0 ${
                     isSelected
-                      ? "text-[#0a0a0a] hover:bg-[#d8bf93]"
-                      : "text-[#888888] hover:bg-[#0a0a0a] hover:text-[#c9a050]"
+                      ? isDark
+                        ? "text-[#0a0a0a] hover:bg-[#d8bf93]"
+                        : "text-white hover:bg-blue-800"
+                      : isDark
+                      ? "text-[#888888] hover:bg-[#0a0a0a] hover:text-[#c9a050]"
+                      : "text-slate-400 hover:bg-slate-100 hover:text-[#0b216f]"
                   }`}
                 >
                   {isExpanded ? (
-                    <ChevronDown className="w-3.5 h-3.5" />
+                    <ChevronDown className="w-4 h-4" />
                   ) : (
-                    <ChevronLeft className="w-3.5 h-3.5" />
+                    <ChevronLeft className="w-4 h-4" />
                   )}
                 </button>
               ) : (
@@ -448,28 +289,48 @@ export const SidebarTree: React.FC<SidebarTreeProps> = ({
 
               <span
                 className={`shrink-0 ${
-                  isSelected ? "text-[#0a0a0a]" : level === 0 ? "text-[#c9a050]" : "text-[#888888]"
+                  isSelected
+                    ? isDark
+                      ? "text-[#0a0a0a]"
+                      : "text-white"
+                    : isDark
+                    ? level === 0
+                      ? "text-[#c9a050]"
+                      : "text-[#888888]"
+                    : level === 0
+                    ? "text-[#0b216f]"
+                    : "text-slate-500"
                 }`}
               >
-                {renderCategoryIcon(node.icon, level === 0 ? "w-4 h-4" : "w-3.5 h-3.5")}
+                {renderCategoryIcon(node.icon, level === 0 ? "w-4.5 h-4.5" : "w-4 h-4")}
               </span>
 
-              <div className="flex flex-col min-w-0">
-                <span className="truncate">
+              <div className="flex flex-col min-w-0 flex-1">
+                <span className="text-sm sm:text-[15px] font-bold truncate leading-snug">
                   <HighlightText
                     text={node.title}
                     query={highlightQuery}
                     highlightClass={
                       isSelected
-                        ? "bg-[#0a0a0a] text-[#c9a050] px-1 py-0.5 rounded"
-                        : "bg-[#c9a050]/30 text-[#d8bf93] px-1 py-0.5 rounded font-bold"
+                        ? isDark
+                          ? "bg-[#0a0a0a] text-[#c9a050] px-1 py-0.5 rounded font-bold"
+                          : "bg-amber-300 text-slate-950 px-1 py-0.5 rounded font-black"
+                        : isDark
+                        ? "bg-[#c9a050]/30 text-[#d8bf93] px-1 py-0.5 rounded font-bold"
+                        : "bg-amber-200 text-amber-950 px-1 py-0.5 rounded font-bold"
                     }
                   />
                 </span>
                 {node.subtitle && (
                   <span
-                    className={`text-[10px] truncate font-normal ${
-                      isSelected ? "text-[#1a1815]" : "text-[#888888]"
+                    className={`text-xs truncate font-normal mt-0.5 ${
+                      isSelected
+                        ? isDark
+                          ? "text-[#1a1815]"
+                          : "text-blue-100"
+                        : isDark
+                        ? "text-[#888888]"
+                        : "text-slate-500"
                     }`}
                   >
                     <HighlightText
@@ -477,8 +338,12 @@ export const SidebarTree: React.FC<SidebarTreeProps> = ({
                       query={highlightQuery}
                       highlightClass={
                         isSelected
-                          ? "bg-[#0a0a0a] text-[#c9a050] px-0.5 rounded"
-                          : "bg-[#c9a050]/30 text-[#d8bf93] px-0.5 rounded"
+                          ? isDark
+                            ? "bg-[#0a0a0a] text-[#c9a050] px-0.5 rounded"
+                            : "bg-amber-300 text-slate-950 px-0.5 rounded"
+                          : isDark
+                          ? "bg-[#c9a050]/30 text-[#d8bf93] px-0.5 rounded"
+                          : "bg-amber-200 text-amber-950 px-0.5 rounded"
                       }
                     />
                   </span>
@@ -486,13 +351,33 @@ export const SidebarTree: React.FC<SidebarTreeProps> = ({
               </div>
             </div>
 
-            <div className="flex items-center gap-1.5 text-xs shrink-0 mr-2">
+            <div className="flex items-center gap-1.5 shrink-0 mr-2">
+              {totalFaqsCount > 0 && (
+                <span
+                  className={`text-xs px-2 py-0.5 rounded-md font-medium ${
+                    isSelected
+                      ? isDark
+                        ? "bg-[#0a0a0a]/30 text-[#0a0a0a]"
+                        : "bg-blue-800 text-blue-100"
+                      : isDark
+                      ? "bg-amber-950/40 text-amber-300 border border-amber-800/40"
+                      : "bg-amber-50 text-amber-800 border border-amber-200"
+                  }`}
+                  title={`${totalFaqsCount} سوال متداول`}
+                >
+                  {totalFaqsCount} FAQ
+                </span>
+              )}
               {totalDocsCount > 0 && (
                 <span
-                  className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono ${
+                  className={`text-xs px-2 py-0.5 rounded-md font-medium ${
                     isSelected
-                      ? "bg-[#0a0a0a] text-[#c9a050] border border-[#c9a050]/50 font-bold"
-                      : "bg-[#0a0a0a] text-[#c9a050] border border-[rgba(201,160,80,0.3)]"
+                      ? isDark
+                        ? "bg-[#0a0a0a] text-[#c9a050] font-bold"
+                        : "bg-white text-[#0b216f] font-bold"
+                      : isDark
+                      ? "bg-[#0a0a0a] text-[#c9a050] border border-[rgba(201,160,80,0.3)]"
+                      : "bg-slate-100 text-slate-700 border border-slate-200"
                   }`}
                   title={`${totalDocsCount} مدرک لازم`}
                 >
@@ -502,19 +387,41 @@ export const SidebarTree: React.FC<SidebarTreeProps> = ({
             </div>
           </div>
 
-          {/* Smart Search Match Details Badge Snippets */}
+          {/* Smart Search Match Details Badge Snippets (FAQs, Docs, Description, Steps) */}
           {highlightQuery && matchInfo.matchedFields.length > 0 && (
-            <div className="mt-2 space-y-1 border-t border-[rgba(201,160,80,0.2)] pt-1.5 pr-6">
+            <div
+              className={`mt-2 space-y-1.5 border-t pt-2 pr-6 ${
+                isSelected
+                  ? isDark
+                    ? "border-[#0a0a0a]/20"
+                    : "border-blue-400/40"
+                  : isDark
+                  ? "border-[rgba(201,160,80,0.2)]"
+                  : "border-slate-200"
+              }`}
+            >
               {matchInfo.matchedFields.slice(0, 3).map((mf, idx) => (
                 <div
                   key={idx}
-                  className={`flex items-start gap-1.5 text-[11px] px-2 py-1 rounded-lg border leading-tight ${
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleSelectNode(node.id, mf.targetTab || matchInfo.bestTab);
+                  }}
+                  className={`flex items-start gap-1.5 text-xs px-2.5 py-1.5 rounded-xl border leading-relaxed transition ${
                     isSelected
-                      ? "bg-[#0a0a0a] border-[#0a0a0a] text-[#e0e0e0] font-normal"
-                      : "bg-[#0a0a0a] border-[rgba(201,160,80,0.2)] text-[#e0e0e0]"
+                      ? isDark
+                        ? "bg-[#0a0a0a] border-[#0a0a0a] text-[#e0e0e0]"
+                        : "bg-blue-900/90 border-blue-800 text-white"
+                      : isDark
+                      ? "bg-[#0a0a0a] border-[rgba(201,160,80,0.2)] text-[#e0e0e0] hover:border-[#c9a050]"
+                      : "bg-slate-50 border-slate-200 text-slate-700 hover:border-blue-300 hover:bg-blue-50/50"
                   }`}
                 >
-                  <span className="flex items-center gap-1 shrink-0 font-bold text-[#c9a050]">
+                  <span
+                    className={`flex items-center gap-1 shrink-0 font-bold ${
+                      isDark ? "text-[#c9a050]" : "text-[#0b216f]"
+                    }`}
+                  >
                     {mf.icon}
                     <span>{mf.label}:</span>
                   </span>
@@ -522,27 +429,41 @@ export const SidebarTree: React.FC<SidebarTreeProps> = ({
                     <HighlightText
                       text={mf.snippet}
                       query={highlightQuery}
-                      highlightClass="bg-[#c9a050]/40 text-[#d8bf93] px-0.5 rounded font-bold"
+                      highlightClass={
+                        isDark
+                          ? "bg-[#c9a050]/40 text-[#d8bf93] px-1 py-0.2 rounded font-bold"
+                          : "bg-amber-200 text-amber-950 px-1 py-0.2 rounded font-bold"
+                      }
                     />
                   </span>
                 </div>
               ))}
               {matchInfo.matchedFields.length > 3 && (
                 <span
-                  className={`text-[9px] font-mono pr-1 ${
-                    isSelected ? "text-[#0a0a0a] font-semibold" : "text-[#888888]"
+                  className={`text-[11px] pr-1 block font-medium ${
+                    isSelected
+                      ? isDark
+                        ? "text-[#0a0a0a]"
+                        : "text-blue-200"
+                      : isDark
+                      ? "text-[#888888]"
+                      : "text-slate-500"
                   }`}
                 >
-                  + {matchInfo.matchedFields.length - 3} مطابقت محتوایی دیگر...
+                  + {matchInfo.matchedFields.length - 3} مطابقت دیگر در سوالات یا محتوا...
                 </span>
               )}
             </div>
           )}
         </div>
 
-        {/* Child Subtitles / Subcategories */}
+        {/* Child Subcategories */}
         {hasChildren && isExpanded && (
-          <div className="border-r border-[rgba(201,160,80,0.2)] my-0.5 mr-3">
+          <div
+            className={`border-r my-0.5 mr-3.5 ${
+              isDark ? "border-[rgba(201,160,80,0.2)]" : "border-slate-200"
+            }`}
+          >
             {children.map((child) => (
               <TreeNodeItem key={child.id} node={child} level={level + 1} />
             ))}
@@ -555,70 +476,114 @@ export const SidebarTree: React.FC<SidebarTreeProps> = ({
   const topLevelNodes = nodeMap.get(null) || [];
 
   const treeContent = (
-    <div className="flex flex-col h-full bg-[#0f0e0c] text-white">
+    <div
+      className={`flex flex-col h-full transition-colors ${
+        isDark ? "bg-[#0f0e0c] text-white" : "bg-slate-50/70 text-slate-900"
+      }`}
+    >
       {/* Search & Tree Controls Header */}
-      <div className="p-3 border-b border-[rgba(201,160,80,0.2)] space-y-2">
+      <div
+        className={`p-3.5 border-b space-y-2.5 ${
+          isDark ? "border-[rgba(201,160,80,0.2)]" : "border-slate-200 bg-white"
+        }`}
+      >
         <div className="flex items-center justify-between lg:hidden mb-1">
-          <span className="text-xs font-bold text-[#c9a050] flex items-center gap-1">
+          <span
+            className={`text-sm font-bold flex items-center gap-1.5 ${
+              isDark ? "text-[#c9a050]" : "text-[#0b216f]"
+            }`}
+          >
             <Layers className="w-4 h-4" /> منوی سرفصل‌های موضوعی
           </span>
           {onCloseMobile && (
             <button
               onClick={onCloseMobile}
-              className="p-1 text-[#888888] hover:text-white rounded-lg bg-[#14120f] border border-[rgba(201,160,80,0.2)]"
+              className={`p-1.5 rounded-xl border ${
+                isDark
+                  ? "text-[#888888] hover:text-white bg-[#14120f] border-[rgba(201,160,80,0.2)]"
+                  : "text-slate-500 hover:text-slate-900 bg-slate-100 border-slate-200"
+              }`}
             >
               <X className="w-4 h-4" />
             </button>
           )}
         </div>
 
-        {/* Smart Search Input Box */}
+        {/* Smart Deep Search Input Box */}
         <div className="relative">
-          <Search className="w-4 h-4 text-[#888888] absolute right-3 top-2.5" />
+          <Search
+            className={`w-4 h-4 absolute right-3.5 top-3 ${
+              isDark ? "text-[#888888]" : "text-slate-400"
+            }`}
+          />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
-            placeholder="جستجوی هوشمند در موضوعات، توضیحات، مدارک و سوالات..."
-            className="w-full bg-[#0a0a0a] border border-[rgba(201,160,80,0.2)] rounded-xl pr-9 pl-8 py-2 text-xs text-[#ffffff] placeholder-[#888888] focus:outline-none focus:border-[#c9a050] focus:ring-1 focus:ring-[#c9a050] transition shadow-inner"
+            placeholder="جستجو در موضوعات، سوالات متداول، مدارک، قوانین..."
+            className={`w-full rounded-2xl pr-10 pl-9 py-2.5 text-xs sm:text-sm transition shadow-inner focus:outline-none focus:ring-2 ${
+              isDark
+                ? "bg-[#0a0a0a] border border-[rgba(201,160,80,0.25)] text-white placeholder-[#888888] focus:border-[#c9a050] focus:ring-[#c9a050]/20"
+                : "bg-white border border-slate-300 text-slate-900 placeholder-slate-400 focus:border-[#0b216f] focus:ring-[#0b216f]/15"
+            }`}
           />
           {searchQuery && (
             <button
               onClick={() => onSearchChange("")}
-              className="absolute left-2.5 top-2.5 text-[#888888] hover:text-white p-0.5 rounded-full hover:bg-[#14120f] transition"
+              className={`absolute left-3 top-2.5 p-1 rounded-full transition ${
+                isDark
+                  ? "text-[#888888] hover:text-white hover:bg-[#14120f]"
+                  : "text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+              }`}
               title="پاک کردن جستجو"
             >
-              <X className="w-3.5 h-3.5" />
+              <X className="w-4 h-4" />
             </button>
           )}
         </div>
 
-        {/* Search Results Summary & Controls */}
-        <div className="flex items-center justify-between text-[11px] text-[#888888] px-1 pt-1">
+        {/* Search Results Summary & Expand/Collapse Controls */}
+        <div
+          className={`flex items-center justify-between text-xs px-1 pt-1 font-medium ${
+            isDark ? "text-[#888888]" : "text-slate-500"
+          }`}
+        >
           {searchQuery.trim() ? (
-            <span className="flex items-center gap-1 text-[#10b981] font-bold">
-              <Sparkles className="w-3.5 h-3.5 text-[#c9a050]" />
+            <span
+              className={`flex items-center gap-1 font-bold ${
+                isDark ? "text-emerald-400" : "text-emerald-700"
+              }`}
+            >
+              <Sparkles className="w-3.5 h-3.5" />
               {totalMatchesCount > 0
-                ? `${totalMatchesCount} سرفصل مطابقت دارد`
-                : "هیچ نتایجی یافت نشد"}
+                ? `${totalMatchesCount} سرفصل یافت شد`
+                : "موردی یافت نشد"}
             </span>
           ) : (
-            <span className="flex items-center gap-1 text-[#c9a050] font-medium">
+            <span
+              className={`flex items-center gap-1.5 font-bold ${
+                isDark ? "text-[#c9a050]" : "text-[#0b216f]"
+              }`}
+            >
               <Layers className="w-3.5 h-3.5" /> ساختار خدمات
             </span>
           )}
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
             <button
               onClick={expandAll}
-              className="hover:text-[#d8bf93] transition cursor-pointer"
+              className={`transition cursor-pointer hover:underline ${
+                isDark ? "hover:text-[#d8bf93]" : "hover:text-[#0b216f]"
+              }`}
             >
               باز کردن همه
             </button>
             <span>•</span>
             <button
               onClick={collapseAll}
-              className="hover:text-[#d8bf93] transition cursor-pointer"
+              className={`transition cursor-pointer hover:underline ${
+                isDark ? "hover:text-[#d8bf93]" : "hover:text-[#0b216f]"
+              }`}
             >
               بستن همه
             </button>
@@ -627,40 +592,62 @@ export const SidebarTree: React.FC<SidebarTreeProps> = ({
       </div>
 
       {/* Tree Content Area */}
-      <div className="flex-1 overflow-y-auto p-2 space-y-1 custom-scrollbar">
+      <div className="flex-1 overflow-y-auto p-3 space-y-1.5 custom-scrollbar">
         {/* Main Center Domains Quick Link */}
         <button
           onClick={() => {
             onSelectNode(null);
             if (onCloseMobile) onCloseMobile();
           }}
-          className={`w-full flex items-center justify-between p-2.5 rounded-xl text-xs font-bold transition mb-2 border cursor-pointer ${
+          className={`w-full flex items-center justify-between p-3 rounded-2xl text-sm font-bold transition mb-2 border cursor-pointer ${
             selectedNodeId === null
-              ? "bg-[#c9a050] text-[#0a0a0a] border-[#c9a050] shadow-md"
-              : "bg-[#14120f] hover:bg-[#1a1815] text-[#c9a050] border-[rgba(201,160,80,0.2)]"
+              ? isDark
+                ? "bg-[#c9a050] text-[#0a0a0a] border-[#c9a050] shadow-md"
+                : "bg-[#0b216f] text-white border-[#0b216f] shadow-md"
+              : isDark
+              ? "bg-[#14120f] hover:bg-[#1a1815] text-[#c9a050] border-[rgba(201,160,80,0.2)]"
+              : "bg-white hover:bg-slate-100 text-[#0b216f] border-slate-200 shadow-xs"
           }`}
         >
-          <div className="flex items-center gap-2">
-            <Layers className="w-4 h-4 text-[#c9a050]" />
+          <div className="flex items-center gap-2.5">
+            <Layers className="w-4.5 h-4.5" />
             <span>صفحه اصلی (حوزه‌های خدمات)</span>
           </div>
-          <ChevronLeft className="w-3.5 h-3.5 text-[#888888]" />
+          <ChevronLeft className="w-4 h-4 opacity-60" />
         </button>
 
         {topLevelNodes.length === 0 ? (
-          <div className="p-4 text-center text-xs text-[#888888]">
+          <div
+            className={`p-6 text-center text-sm ${
+              isDark ? "text-[#888888]" : "text-slate-500"
+            }`}
+          >
             هیچ حوزه یا خدمت منتشرشده‌ای یافت نشد.
           </div>
         ) : searchQuery.trim() && totalMatchesCount === 0 ? (
-          <div className="p-6 text-center text-xs text-[#e0e0e0] space-y-2">
-            <Search className="w-8 h-8 text-[#888888] mx-auto" />
-            <p className="font-bold text-[#ffffff]">موردی با عبارت «{searchQuery}» یافت نشد.</p>
-            <p className="text-[11px] text-[#888888]">
-              جستجو در عنوان، توضیحات، مدارک، مراحل، سوالات متداول و برچسب‌ها انجام شد.
+          <div
+            className={`p-6 text-center text-sm rounded-2xl border space-y-2.5 my-2 ${
+              isDark
+                ? "bg-[#14120f] border-[rgba(201,160,80,0.2)] text-[#e0e0e0]"
+                : "bg-white border-slate-200 text-slate-700 shadow-xs"
+            }`}
+          >
+            <Search className="w-8 h-8 mx-auto opacity-40" />
+            <p className={`font-bold ${isDark ? "text-white" : "text-slate-900"}`}>
+              موردی با عبارت «{searchQuery}» یافت نشد.
+            </p>
+            <p
+              className={`text-xs leading-relaxed ${
+                isDark ? "text-[#888888]" : "text-slate-500"
+              }`}
+            >
+              جستجوی هوشمند در عنوان، سوالات متداول (پرسش و پاسخ)، مدارک، مراحل و قوانین انجام شد.
             </p>
             <button
               onClick={() => onSearchChange("")}
-              className="mt-2 text-xs text-[#c9a050] hover:underline inline-block font-semibold"
+              className={`mt-2 text-xs font-bold hover:underline inline-block ${
+                isDark ? "text-[#c9a050]" : "text-[#0b216f]"
+              }`}
             >
               پاک کردن فیلتر جستجو
             </button>
@@ -671,11 +658,18 @@ export const SidebarTree: React.FC<SidebarTreeProps> = ({
       </div>
 
       {/* Bottom info badge */}
-      <div className="p-3 bg-[#0a0a0a] border-t border-[rgba(201,160,80,0.2)] text-[11px] text-[#888888] flex items-center justify-between">
-        <span className="flex items-center gap-1">
-          <Sparkles className="w-3 h-3 text-[#c9a050]" /> سیستم جستجوی هوشمند
+      <div
+        className={`p-3.5 border-t text-xs flex items-center justify-between font-medium ${
+          isDark
+            ? "bg-[#0a0a0a] border-[rgba(201,160,80,0.2)] text-[#888888]"
+            : "bg-white border-slate-200 text-slate-500"
+        }`}
+      >
+        <span className="flex items-center gap-1.5 font-bold">
+          <Sparkles className={`w-3.5 h-3.5 ${isDark ? "text-[#c9a050]" : "text-[#0b216f]"}`} />
+          جستجوی عمیق و هوشمند
         </span>
-        <span className="font-mono text-[10px] text-[#888888]">{nodes.length} سرفصل</span>
+        <span className="font-mono text-xs">{nodes.length} سرفصل</span>
       </div>
     </div>
   );
@@ -683,7 +677,13 @@ export const SidebarTree: React.FC<SidebarTreeProps> = ({
   return (
     <>
       {/* Desktop Sticky Sidebar */}
-      <aside className="hidden lg:flex flex-col w-80 bg-[#0f0e0c] border-l border-[rgba(201,160,80,0.2)] h-[calc(100vh-4rem)] sticky top-16 shadow-inner shrink-0">
+      <aside
+        className={`hidden lg:flex flex-col w-84 h-[calc(100vh-4rem)] sticky top-16 shadow-inner shrink-0 border-l transition-colors ${
+          isDark
+            ? "bg-[#0f0e0c] border-[rgba(201,160,80,0.2)]"
+            : "bg-slate-50/70 border-slate-200"
+        }`}
+      >
         {treeContent}
       </aside>
 
@@ -691,10 +691,14 @@ export const SidebarTree: React.FC<SidebarTreeProps> = ({
       {isMobileOpen && (
         <div className="fixed inset-0 z-50 lg:hidden flex">
           <div
-            className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm"
+            className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm"
             onClick={onCloseMobile}
           />
-          <div className="relative w-80 max-w-[85vw] h-full bg-slate-900 shadow-2xl z-10 flex flex-col">
+          <div
+            className={`relative w-84 max-w-[85vw] h-full shadow-2xl z-10 flex flex-col ${
+              isDark ? "bg-[#0f0e0c]" : "bg-white"
+            }`}
+          >
             {treeContent}
           </div>
         </div>
@@ -702,4 +706,3 @@ export const SidebarTree: React.FC<SidebarTreeProps> = ({
     </>
   );
 };
-
