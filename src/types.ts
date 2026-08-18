@@ -27,10 +27,45 @@ export interface ProcessStep {
   estimatedTime?: string; // e.g. '۲ روز کاری'
 }
 
+export type FAQStatus = 'PENDING' | 'ANSWERED' | 'REJECTED';
+
 export interface FAQ {
   id: string;
+  nodeId?: string;
+  nodeTitle?: string;
   question: string;
   answer: string;
+  status?: FAQStatus; // 'PENDING' for operator submissions, 'ANSWERED' when published
+  submittedBy?: {
+    id: string;
+    username: string;
+    fullName: string;
+  };
+  submittedAt?: string;
+  answeredBy?: {
+    id: string;
+    username: string;
+    fullName: string;
+  };
+  answeredAt?: string;
+  similarityNote?: string;
+  matchedSimilarQuestion?: string;
+  matchedSimilarityPercent?: number;
+}
+
+export interface SimilarFaqItem {
+  id: string;
+  nodeId: string;
+  nodeTitle: string;
+  question: string;
+  answer: string;
+  similarityPercent: number;
+}
+
+export interface SimilarityCheckResult {
+  isSimilar: boolean; // true if maxSimilarity >= 70%
+  maxSimilarity: number;
+  similarFaqs: SimilarFaqItem[];
 }
 
 export interface CategoryNode {
@@ -62,7 +97,18 @@ export interface AuditLog {
   timestamp: string;
   userId: string;
   userName: string;
-  action: 'CREATE_NODE' | 'UPDATE_NODE' | 'DELETE_NODE' | 'CREATE_USER' | 'UPDATE_USER' | 'DELETE_USER' | 'RESET_PASSWORD' | 'SYSTEM_INIT';
+  action:
+    | 'CREATE_NODE'
+    | 'UPDATE_NODE'
+    | 'DELETE_NODE'
+    | 'CREATE_USER'
+    | 'UPDATE_USER'
+    | 'DELETE_USER'
+    | 'RESET_PASSWORD'
+    | 'SYSTEM_INIT'
+    | 'SUBMIT_FAQ'
+    | 'ANSWER_FAQ'
+    | 'DELETE_FAQ';
   details: string;
 }
 
@@ -77,3 +123,4 @@ export interface SearchResultItem {
   matchedField: 'title' | 'description' | 'document' | 'faq' | 'tag';
   matchedSnippet: string;
 }
+

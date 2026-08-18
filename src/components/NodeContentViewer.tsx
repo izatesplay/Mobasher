@@ -4,6 +4,7 @@ import { CategoryNode } from "../types";
 import { useTheme } from "../context/ThemeContext";
 import { renderCategoryIcon } from "./SidebarTree";
 import { LetterheadPdfModal } from "./LetterheadPdfModal";
+import { SubmitFaqModal } from "./SubmitFaqModal";
 import { HighlightText } from "../lib/searchUtils";
 import {
   ChevronLeft,
@@ -30,6 +31,7 @@ import {
   Check,
   PhoneCall,
   Info,
+  Plus,
 } from "lucide-react";
 
 interface NodeContentViewerProps {
@@ -110,6 +112,23 @@ export const NodeContentViewer: React.FC<NodeContentViewerProps> = ({
   const [copiedMessage, setCopiedMessage] = useState(false);
   const [activeTab, setActiveTab] = useState<"subcategories" | "documents" | "process" | "faqs">("subcategories");
   const [isPdfModalOpen, setIsPdfModalOpen] = useState(false);
+  const [isSubmitFaqModalOpen, setIsSubmitFaqModalOpen] = useState(false);
+
+  // Collect all FAQs across all nodes for similarity search
+  const allSystemFaqs = useMemo(() => {
+    const list: { id?: string; question: string; answer?: string; nodeTitle?: string }[] = [];
+    allNodes.forEach((n) => {
+      (n.faqs || []).forEach((f) => {
+        list.push({
+          id: f.id,
+          question: f.question,
+          answer: f.answer,
+          nodeTitle: n.title,
+        });
+      });
+    });
+    return list;
+  }, [allNodes]);
 
   // If parent specified a target tab (e.g. from search click), activate it
   useEffect(() => {
@@ -1239,18 +1258,32 @@ export const NodeContentViewer: React.FC<NodeContentViewerProps> = ({
             {/* TAB CONTENT 4: FAQS */}
             {activeTab === "faqs" && (
               <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h2
-                    className={`text-base sm:text-lg font-black flex items-center gap-2 ${
-                      isDark ? "text-[#c9a050]" : "text-[#0b216f]"
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl border shadow-xs bg-slate-900/30">
+                  <div>
+                    <h2
+                      className={`text-base sm:text-lg font-black flex items-center gap-2 ${
+                        isDark ? "text-[#c9a050]" : "text-[#0b216f]"
+                      }`}
+                    >
+                      <HelpCircle className="w-5 h-5" />
+                      سوالات متداول مشتریان در تماس‌های تلفنی
+                    </h2>
+                    <span className={`text-xs ${isDark ? "text-[#888888]" : "text-slate-500"}`}>
+                      راهنمای پاسخ سریع اپراتور به مشتری یا ثبت سوال جدید برای تایید ادمین
+                    </span>
+                  </div>
+
+                  <button
+                    onClick={() => setIsSubmitFaqModalOpen(true)}
+                    className={`flex items-center justify-center gap-2 text-xs sm:text-sm font-black px-4 py-2.5 rounded-xl transition cursor-pointer shadow-md border ${
+                      isDark
+                        ? "bg-[#c9a050] hover:bg-[#d8bf93] text-[#0a0a0a] border-[#c9a050]"
+                        : "bg-[#0b216f] hover:bg-blue-900 text-white border-[#0b216f]"
                     }`}
                   >
-                    <HelpCircle className="w-5 h-5" />
-                    سوالات متداول مشتریان در تماس‌های تلفنی
-                  </h2>
-                  <span className={`text-xs ${isDark ? "text-[#888888]" : "text-slate-500"}`}>
-                    راهنمای پاسخ سریع اپراتور به مشتری
-                  </span>
+                    <Plus className="w-4 h-4 shrink-0" />
+                    <span>ثبت سوال جدید (کال‌سنتر)</span>
+                  </button>
                 </div>
 
                 {faqs.length === 0 ? (
@@ -1417,6 +1450,22 @@ export const NodeContentViewer: React.FC<NodeContentViewerProps> = ({
           onClose={() => setIsPdfModalOpen(false)}
           node={node}
           selectedDocs={requiredDocuments.filter((doc) => selectedDocIds[doc.id])}
+        />
+      )}
+
+      {/* Call Center Submit New FAQ Modal */}
+      {node && (
+        <SubmitFaqModal
+          isOpen={isSubmitFaqModalOpen}
+          onClose={() => setIsSubmitFaqModalOpen(false)}
+          currentNode={node}
+          allNodes={allNodes}
+          nodeId={node.id}
+          nodeTitle={node.title}
+          allFaqs={allSystemFaqs}
+          onSubmitted={() => {
+            // Note: the question is now submitted and pending admin approval
+          }}
         />
       )}
     </div>

@@ -5,7 +5,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
-import { CategoryNode, User, AuditLog, Role } from "./src/types";
+import { CategoryNode, User, AuditLog, Role, FAQ } from "./src/types";
 
 const PORT = 3000;
 const JWT_SECRET = process.env.JWT_SECRET || "mobasher_karmon_secret_key_2026_x98z";
@@ -755,7 +755,349 @@ function addAuditLog(userId: string, userName: string, action: AuditLog["action"
   saveStore();
 }
 
-// ------------------- API ROUTES -------------------
+// Persian text normalization and similarity computation
+function normalizePersianText(text: string): string {
+  if (!text) return "";
+  return text
+    .toLowerCase()
+    .replace(/[\u200B-\u200D\uFEFF]/g, "") // remove zero width characters
+    .replace(/[ي]/g, "ی")
+    .replace(/[ك]/g, "ک")
+    .replace(/[ةۀ]/g, "ه")
+    .replace(/[ؤ]/g, "و")
+    .replace(/[إأآ]/g, "ا")
+    .replace(/[\u064B-\u065F]/g, "") // remove tashkeel
+    .replace(/[0-9]/g, (w) => "۰۱۲۳۴۵۶۷۸۹"[+w] || w)
+    .replace(/[؟?!\.,،:;؛\-_/\\()\[\]{}"'«»]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function getWordTokens(text: string): string[] {
+  const normalized = normalizePersianText(text);
+  if (!normalized) return [];
+  return normalized.split(" ").filter((w) => w.length > 1);
+}
+
+function getCharacterBigrams(text: string): Set<string> {
+  const normalized = normalizePersianText(text).replace(/\s+/g, "");
+  const bigrams = new Set<string>();
+  if (normalized.length < 2) {
+    if (normalized.length === 1) bigrams.add(normalized);
+    return bigrams;
+  }
+  for (let i = 0; i < normalized.length - 1; i++) {
+    bigrams.add(normalized.slice(i, i + 2));
+  }
+  return bigrams;
+}
+
+function levenshteinDistance(s1: string, s2: string): number {
+  const len1 = s1.length;
+  const len2 = s2.length;
+  const matrix: number[][] = [];
+
+  for (let i = 0; i <= len1; i++) {
+    matrix[i] = [i];
+  }
+  for (let j = 0; j <= len2; j++) {
+    matrix[0][j] = j;
+  }
+
+  for (let i = 1; i <= len1; i++) {
+    for (let j = 1; j <= len2; j++) {
+      const cost = s1[i - 1] === s2[j - 1] ? 0 : 1;
+      matrix[i][j] = Math.min(
+        matrix[i - 1][j] + 1,
+        matrix[i][j - 1] + 1,
+        matrix[i - 1][j - 1] + cost
+      );
+    }
+  }
+
+  return matrix[len1][len2];
+}
+
+function calculatePersianSimilarity(str1: string, str2: string): number {
+  const norm1 = normalizePersianText(str1);
+  const norm2 = normalizePersianText(str2);
+
+  if (!norm1 || !norm2) return 0;
+  if (norm1 === norm2) return 100;
+
+  // 1. Token Jaccard Similarity
+  const tokens1 = getWordTokens(str1);
+  const tokens2 = getWordTokens(str2);
+  let jaccardScore = 0;
+  if (tokens1.length > 0 && tokens2.length > 0) {
+    const set1 = new Set(tokens1);
+    const set2 = new Set(tokens2);
+    let intersection = 0;
+    for (const t of set1) {
+      if (set2.has(t)) intersection++;
+    }
+    const union = new Set([...tokens1, ...tokens2]).size;
+    jaccardScore = union > 0 ? intersection / union : 0;
+  }
+
+  // 2. Character Bigram Dice Coefficient
+  const bigrams1 = getCharacterBigrams(str1);
+  const bigrams2 = getCharacterBigrams(str2);
+  let diceScore = 0;
+  if (bigrams1.size > 0 && bigrams2.size > 0) {
+    let matches = 0;
+    for (const bg of bigrams1) {
+      if (bigrams2.has(bg)) matches++;
+    }
+    diceScore = (2 * matches) / (bigrams1.size + bigrams2.size);
+  }
+
+  // 3. Levenshtein ratio
+  const maxLen = Math.max(norm1.length, norm2.length);
+  const levDist = levenshteinDistance(norm1, norm2);
+  const levScore = maxLen > 0 ? Math.max(0, 1 - levDist / maxLen) : 0;
+
+  const combined = Math.max(
+    jaccardScore * 0.45 + diceScore * 0.35 + levScore * 0.2,
+    diceScore * 0.65 + jaccardScore * 0.35,
+    jaccardScore * 0.8 + levScore * 0.2,
+    diceScore
+  );
+
+  return Math.min(100, Math.round(combined * 100));
+}
+
+// ------------------- FAQ MANAGEMENT & SIMILARITY CHECK API -------------------
+
+// Check FAQ Similarity across all existing questions
+app.get("/api/faqs/check-similarity", authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+  const query = String(req.query.q || "").trim();
+  if (!query) {
+    res.json({ isSimilar: false, maxSimilarity: 0, similarFaqs: [] });
+    return;
+  }
+
+  const results: any[] = [];
+  let maxSimilarity = 0;
+
+  for (const node of store.nodes) {
+    if (!Array.isArray(node.faqs)) continue;
+    for (const faq of node.faqs) {
+      if (!faq.question) continue;
+      const sim = calculatePersianSimilarity(query, faq.question);
+      if (sim >= 70) {
+        if (sim > maxSimilarity) maxSimilarity = sim;
+        results.push({
+          id: faq.id,
+          nodeId: node.id,
+          nodeTitle: node.title,
+          question: faq.question,
+          answer: faq.answer,
+          similarityPercent: sim,
+        });
+      }
+    }
+  }
+
+  results.sort((a, b) => b.similarityPercent - a.similarityPercent);
+
+  res.json({
+    isSimilar: maxSimilarity >= 70,
+    maxSimilarity,
+    similarFaqs: results,
+  });
+});
+
+// Get all pending FAQs across all nodes
+app.get("/api/faqs/pending", authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+  const pendingFaqs: any[] = [];
+
+  for (const node of store.nodes) {
+    if (!Array.isArray(node.faqs)) continue;
+    for (const faq of node.faqs) {
+      if (faq.status === "PENDING" || (!faq.answer && faq.status !== "REJECTED")) {
+        pendingFaqs.push({
+          ...faq,
+          nodeId: node.id,
+          nodeTitle: node.title,
+        });
+      }
+    }
+  }
+
+  // Sort by submission date (newest first)
+  pendingFaqs.sort((a, b) => {
+    const timeA = new Date(a.submittedAt || 0).getTime();
+    const timeB = new Date(b.submittedAt || 0).getTime();
+    return timeB - timeA;
+  });
+
+  res.json(pendingFaqs);
+});
+
+// Submit a new FAQ by call center operator (MEMBER or ADMIN)
+app.post("/api/faqs/submit", authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+  const { nodeId, question, note, confirmedDifferent, similarQuestion, similarityPercent } = req.body;
+
+  if (!question || typeof question !== "string" || !question.trim()) {
+    res.status(400).json({ error: "متن سوال الزامی است." });
+    return;
+  }
+
+  if (!nodeId || typeof nodeId !== "string") {
+    res.status(400).json({ error: "شناسه سرفصل/بخش مربوطه الزامی است." });
+    return;
+  }
+
+  const targetNode = store.nodes.find((n) => n.id === nodeId);
+  if (!targetNode) {
+    res.status(404).json({ error: "سرفصل یا بخش مورد نظر یافت نشد." });
+    return;
+  }
+
+  if (!Array.isArray(targetNode.faqs)) {
+    targetNode.faqs = [];
+  }
+
+  const newFaqId = "faq_" + Date.now() + "_" + Math.floor(Math.random() * 1000);
+  const isUserAdmin = req.user?.role === "ADMIN";
+
+  const newFaq: any = {
+    id: newFaqId,
+    nodeId: targetNode.id,
+    nodeTitle: targetNode.title,
+    question: question.trim(),
+    answer: "",
+    status: "PENDING",
+    submittedBy: {
+      id: req.user!.id,
+      username: req.user!.username,
+      fullName: req.user!.fullName,
+    },
+    submittedAt: new Date().toISOString(),
+    similarityNote: note || "",
+    matchedSimilarQuestion: similarQuestion || "",
+    matchedSimilarityPercent: Number(similarityPercent) || 0,
+  };
+
+  targetNode.faqs.unshift(newFaq);
+  targetNode.updatedAt = new Date().toISOString();
+  saveStore();
+
+  addAuditLog(
+    req.user!.id,
+    req.user!.fullName,
+    "SUBMIT_FAQ",
+    `ثبت سوال متداول جدید توسط اپراتور ${req.user!.fullName} برای بخش «${targetNode.title}»: «${newFaq.question}»${
+      similarityPercent ? ` (با ${similarityPercent}٪ تشابه - تأیید تمایز شده)` : ""
+    }`
+  );
+
+  res.json({
+    status: "success",
+    message: "سوال با موفقیت ثبت گردید و جهت پاسخ‌دهی به ادمین ارشد ارسال شد.",
+    faq: newFaq,
+  });
+});
+
+// Admin API: Answer and publish a FAQ
+app.put("/api/faqs/:id/answer", authMiddleware, adminOnlyMiddleware, (req: AuthenticatedRequest, res: Response) => {
+  const faqId = req.params.id;
+  const { answer, question, nodeId } = req.body;
+
+  if (!answer || typeof answer !== "string" || !answer.trim()) {
+    res.status(400).json({ error: "پاسخ سوال نمی‌تواند خالی باشد." });
+    return;
+  }
+
+  // Find node containing this FAQ
+  let foundNode: CategoryNode | undefined;
+  let foundFaqIndex = -1;
+
+  for (const node of store.nodes) {
+    if (!Array.isArray(node.faqs)) continue;
+    const idx = node.faqs.findIndex((f) => f.id === faqId);
+    if (idx !== -1) {
+      foundNode = node;
+      foundFaqIndex = idx;
+      break;
+    }
+  }
+
+  if (!foundNode || foundFaqIndex === -1) {
+    res.status(404).json({ error: "سوال مورد نظر یافت نشد." });
+    return;
+  }
+
+  const existingFaq = foundNode.faqs[foundFaqIndex];
+
+  const updatedFaq = {
+    ...existingFaq,
+    question: question && question.trim() ? question.trim() : existingFaq.question,
+    answer: answer.trim(),
+    status: "ANSWERED" as const,
+    answeredBy: {
+      id: req.user!.id,
+      username: req.user!.username,
+      fullName: req.user!.fullName,
+    },
+    answeredAt: new Date().toISOString(),
+  };
+
+  foundNode.faqs[foundFaqIndex] = updatedFaq;
+  foundNode.updatedAt = new Date().toISOString();
+  saveStore();
+
+  addAuditLog(
+    req.user!.id,
+    req.user!.fullName,
+    "ANSWER_FAQ",
+    `ثبت و انتشار پاسخ رسمی برای سوال «${updatedFaq.question}» در سرفصل «${foundNode.title}» توسط ${req.user!.fullName}`
+  );
+
+  res.json({
+    status: "success",
+    message: "پاسخ سوال با موفقیت ذخیره و در پایگاه دانش منتشر شد.",
+    faq: updatedFaq,
+  });
+});
+
+// Admin API: Delete/Reject FAQ
+app.delete("/api/faqs/:id", authMiddleware, adminOnlyMiddleware, (req: AuthenticatedRequest, res: Response) => {
+  const faqId = req.params.id;
+
+  let foundNode: CategoryNode | undefined;
+  let deletedFaqQuestion = "";
+
+  for (const node of store.nodes) {
+    if (!Array.isArray(node.faqs)) continue;
+    const idx = node.faqs.findIndex((f) => f.id === faqId);
+    if (idx !== -1) {
+      foundNode = node;
+      deletedFaqQuestion = node.faqs[idx].question;
+      node.faqs.splice(idx, 1);
+      node.updatedAt = new Date().toISOString();
+      break;
+    }
+  }
+
+  if (!foundNode) {
+    res.status(404).json({ error: "سوال مورد نظر یافت نشد." });
+    return;
+  }
+
+  saveStore();
+
+  addAuditLog(
+    req.user!.id,
+    req.user!.fullName,
+    "DELETE_FAQ",
+    `حذف سوال متداول «${deletedFaqQuestion}» از سرفصل «${foundNode.title}» توسط ${req.user!.fullName}`
+  );
+
+  res.json({ status: "success", message: "سوال متداول با موفقیت حذف گردید." });
+});
+
 
 // Auth API: Public users list for selection on login screen
 app.get("/api/auth/public-users", (req: Request, res: Response) => {
@@ -843,6 +1185,20 @@ app.all(["/api.php", "/public/api.php"], (req: Request, res: Response) => {
 
   if (action === "get_users") {
     res.json(store.users);
+    return;
+  }
+
+  if (action === "get_pending_faqs") {
+    const pendingFaqs: any[] = [];
+    for (const node of store.nodes) {
+      if (!Array.isArray(node.faqs)) continue;
+      for (const faq of node.faqs) {
+        if (faq.status === "PENDING" || (!faq.answer && faq.status !== "REJECTED")) {
+          pendingFaqs.push({ ...faq, nodeId: node.id, nodeTitle: node.title });
+        }
+      }
+    }
+    res.json(pendingFaqs);
     return;
   }
 
@@ -1192,6 +1548,176 @@ app.delete("/api/users/:id", authMiddleware, adminOnlyMiddleware, (req: Authenti
 // Audit Logs API
 app.get("/api/audit-logs", authMiddleware, adminOnlyMiddleware, (req: AuthenticatedRequest, res: Response) => {
   res.json(store.auditLogs);
+});
+
+// ------------------- CALL CENTER FAQ MANAGEMENT & SUBMISSIONS -------------------
+
+// 1. Get Pending FAQs for Admin
+app.get("/api/faqs/pending", authMiddleware, adminOnlyMiddleware, (req: AuthenticatedRequest, res: Response) => {
+  const pending: any[] = [];
+  for (const node of store.nodes) {
+    if (!Array.isArray(node.faqs)) continue;
+    for (const faq of node.faqs) {
+      if (faq.status === "PENDING" || (!faq.answer && faq.status !== "REJECTED")) {
+        pending.push({
+          ...faq,
+          nodeId: node.id,
+          nodeTitle: node.title,
+        });
+      }
+    }
+  }
+  res.json(pending);
+});
+
+// 2. Submit new FAQ from Call Center Member
+app.post("/api/faqs/submit", authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+  const { nodeId, question, note, confirmedDifferent, similarQuestion, similarityPercent } = req.body;
+
+  if (!nodeId || !question || !String(question).trim()) {
+    res.status(400).json({ error: "شناسه سرفصل و متن سوال الزامی است." });
+    return;
+  }
+
+  const targetNode = store.nodes.find((n) => n.id === nodeId);
+  if (!targetNode) {
+    res.status(404).json({ error: "سرفصل مورد نظر یافت نشد." });
+    return;
+  }
+
+  const newFaq: FAQ = {
+    id: "faq_" + Date.now() + "_" + Math.floor(Math.random() * 1000),
+    nodeId: targetNode.id,
+    nodeTitle: targetNode.title,
+    question: String(question).trim(),
+    answer: "",
+    status: "PENDING",
+    submittedBy: {
+      id: req.user!.id,
+      username: req.user!.username,
+      fullName: req.user!.fullName,
+    },
+    submittedAt: new Date().toISOString(),
+    similarityNote: note ? String(note).trim() : undefined,
+    matchedSimilarQuestion: similarQuestion,
+    matchedSimilarityPercent: similarityPercent,
+  };
+
+  if (!Array.isArray(targetNode.faqs)) {
+    targetNode.faqs = [];
+  }
+  targetNode.faqs.unshift(newFaq);
+  saveStore();
+
+  addAuditLog(
+    req.user!.id,
+    req.user!.fullName,
+    "SUBMIT_FAQ",
+    `ثبت سوال جدید کال‌سنتر در سرفصل "${targetNode.title}": "${newFaq.question}"`
+  );
+
+  res.json({
+    status: "success",
+    message: "سوال با موفقیت ثبت شد و به بخش تایید و پاسخ‌دهی ادمین ارجاع گردید.",
+    faq: newFaq,
+  });
+});
+
+// 3. Admin answers and publishes FAQ
+app.put("/api/faqs/:id/answer", authMiddleware, adminOnlyMiddleware, (req: AuthenticatedRequest, res: Response) => {
+  const targetId = req.params.id;
+  const { answer, question, nodeId } = req.body;
+
+  if (!answer || !String(answer).trim()) {
+    res.status(400).json({ error: "متن پاسخ الزامی است." });
+    return;
+  }
+
+  let foundFaq: FAQ | null = null;
+  let parentNode: CategoryNode | null = null;
+
+  for (const node of store.nodes) {
+    if (!Array.isArray(node.faqs)) continue;
+    const item = node.faqs.find((f) => f.id === targetId);
+    if (item) {
+      foundFaq = item;
+      parentNode = node;
+      break;
+    }
+  }
+
+  if (!foundFaq || !parentNode) {
+    res.status(404).json({ error: "سوال مورد نظر یافت نشد." });
+    return;
+  }
+
+  foundFaq.answer = String(answer).trim();
+  if (question && String(question).trim()) {
+    foundFaq.question = String(question).trim();
+  }
+  foundFaq.status = "ANSWERED";
+  foundFaq.answeredBy = {
+    id: req.user!.id,
+    username: req.user!.username,
+    fullName: req.user!.fullName,
+  };
+  foundFaq.answeredAt = new Date().toISOString();
+
+  parentNode.updatedAt = new Date().toISOString();
+  saveStore();
+
+  addAuditLog(
+    req.user!.id,
+    req.user!.fullName,
+    "ANSWER_FAQ",
+    `ثبت پاسخ رسمی و انتشار سوال "${foundFaq.question}" در سرفصل "${parentNode.title}"`
+  );
+
+  res.json({
+    status: "success",
+    message: "پاسخ با موفقیت ثبت و در پایگاه دانش منتشر شد.",
+    faq: foundFaq,
+  });
+});
+
+// 4. Admin deletes / rejects FAQ
+app.delete("/api/faqs/:id", authMiddleware, adminOnlyMiddleware, (req: AuthenticatedRequest, res: Response) => {
+  const targetId = req.params.id;
+  let deleted = false;
+  let deletedQuestion = "";
+  let parentTitle = "";
+
+  for (const node of store.nodes) {
+    if (!Array.isArray(node.faqs)) continue;
+    const idx = node.faqs.findIndex((f) => f.id === targetId);
+    if (idx !== -1) {
+      deletedQuestion = node.faqs[idx].question;
+      parentTitle = node.title;
+      node.faqs.splice(idx, 1);
+      node.updatedAt = new Date().toISOString();
+      deleted = true;
+      break;
+    }
+  }
+
+  if (!deleted) {
+    res.status(404).json({ error: "سوال مورد نظر یافت نشد یا قبلاً حذف شده است." });
+    return;
+  }
+
+  saveStore();
+
+  addAuditLog(
+    req.user!.id,
+    req.user!.fullName,
+    "DELETE_FAQ",
+    `حذف/رد سوال "${deletedQuestion}" از سرفصل "${parentTitle}"`
+  );
+
+  res.json({
+    status: "success",
+    message: "سوال با موفقیت حذف گردید.",
+  });
 });
 
 // ------------------- GEMINI AI CALL CENTER ASSISTANT -------------------

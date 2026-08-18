@@ -25,17 +25,24 @@ import {
   Coins,
   Database,
   RefreshCw,
+  Bell,
+  MessageSquarePlus,
+  Send,
+  Loader2,
+  Check,
 } from "lucide-react";
 import { renderCategoryIcon } from "../SidebarTree";
+import { PendingFaqNotificationModal } from "./PendingFaqNotificationModal";
 
 interface AdminDashboardProps {
   nodes: CategoryNode[];
   onRefreshNodes: () => void;
   currentUser: User;
+  onSelectNode?: (nodeId: string) => void;
 }
 
-export const AdminDashboard: React.FC<AdminDashboardProps> = ({ nodes, onRefreshNodes, currentUser }) => {
-  const [activeTab, setActiveTab] = useState<"content" | "users" | "audit">("content");
+export const AdminDashboard: React.FC<AdminDashboardProps> = ({ nodes, onRefreshNodes, currentUser, onSelectNode }) => {
+  const [activeTab, setActiveTab] = useState<"content" | "faqs" | "users" | "audit">("content");
 
   // Content Node State
   const [selectedNode, setSelectedNode] = useState<CategoryNode | null>(null);
@@ -60,6 +67,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ nodes, onRefresh
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [loadingLogs, setLoadingLogs] = useState(false);
 
+  // Pending FAQs State & Auto Notification
+  const [pendingFaqs, setPendingFaqs] = useState<FAQ[]>([]);
+  const [loadingFaqs, setLoadingFaqs] = useState(false);
+  const [isPendingModalOpen, setIsPendingModalOpen] = useState(false);
+  const [inlineAnswerId, setInlineAnswerId] = useState<string | null>(null);
+  const [inlineAnswerText, setInlineAnswerText] = useState("");
+  const [inlineEditedQuestion, setInlineEditedQuestion] = useState("");
+  const [isSubmittingAnswer, setIsSubmittingAnswer] = useState(false);
+  const [faqActionMsg, setFaqActionMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
   // Custom Confirmation Modal State (replaces window.confirm)
   const [confirmModal, setConfirmModal] = useState<{
     isOpen: boolean;
@@ -77,51 +94,79 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ nodes, onRefresh
   const [isSyncingPhp, setIsSyncingPhp] = useState(false);
 
   const handleTestPhpBridge = async () => {
-    setPhpStatusMsg(null);
     try {
       const res = await api.checkPhpStatus();
-      if (res.status === "ok") {
+      if (res && res.status === "ok") {
         setPhpStatusMsg({
           type: "success",
-          text: `اتصال دیتابیس MySQL بر روی cPanel (پورت/هاست: ${res.db_name}) فعال است.`,
+          text: `ارتباط با اسکریپت MySQL (api.php) برقرار است (${res.node_count || 0} سرفصل، ${res.user_count || 0} کاربر).`,
         });
       } else {
-        setPhpStatusMsg({ type: "error", text: res.error || "خطا در برقراری ارتباط با api.php" });
+        setPhpStatusMsg({
+          type: "error",
+          text: res?.message || "خطا در ارتباط با سرور PHP / MySQL",
+        });
       }
     } catch (err: any) {
       setPhpStatusMsg({
         type: "error",
-        text: `فایل api.php در مسیر public/api.php قابل دسترسی است. جهت اتصال واقعی cPanel، اطلاعات دیتابیس را در api.php تنظیم کنید. (${err.message})`,
+        text: err.message || "ارتباط با سرور برقرار نشد.",
       });
     }
   };
 
   const handleSyncToPhp = async () => {
     setIsSyncingPhp(true);
-    setPhpStatusMsg(null);
     try {
-      const currentUsers = users.length > 0 ? users : await api.getUsers().catch(() => []);
-      const res = await api.syncAllToPhp(nodes, currentUsers);
-      if (res.status === "success") {
+      const res = await api.syncAllToPhp(nodes);
+      if (res && res.status === "ok") {
         setPhpStatusMsg({
           type: "success",
-          text: "تمامی سرفصل‌ها و اعضا با موفقیت در دیتابیس MySQL cPanel سینک شدند.",
+          text: `تمامی سرفصل‌ها با پایگاه داده MySQL با موفقیت همگام شدند (${res.imported_count || nodes.length} رکورد).`,
         });
       } else {
-        setPhpStatusMsg({ type: "error", text: res.error || "خطا در همگام‌سازی cPanel" });
+        setPhpStatusMsg({
+          type: "error",
+          text: res?.message || "خطا در همگام‌سازی",
+        });
       }
     } catch (err: any) {
       setPhpStatusMsg({
         type: "error",
-        text: `عدم امکان همگام‌سازی با api.php. لطفا فایل api.php را در هاست cPanel قرار داده و دیتابیس را تنظیم نمایید.`,
+        text: err.message || "خطا در همگام‌سازی",
       });
     } finally {
       setIsSyncingPhp(false);
     }
   };
 
+  const fetchPendingFaqs = async (shouldAutoOpenModal = false) => {
+    try {
+      const faqs = await api.getPendingFaqs();
+      const safeFaqs = Array.isArray(faqs) ? faqs : [];
+      setPendingFaqs(safeFaqs);
+      if (shouldAutoOpenModal && safeFaqs.length > 0) {
+        setIsPendingModalOpen(true);
+      }
+    } catch (err) {
+      console.warn("Failed to load pending faqs:", err);
+      setPendingFaqs([]);
+    }
+  };
+
+  // Poll for pending FAQs every 12 seconds so new operator questions trigger prompt
   useEffect(() => {
-    if (activeTab === "users") {
+    fetchPendingFaqs(true);
+    const interval = setInterval(() => {
+      fetchPendingFaqs(false);
+    }, 12000);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === "faqs") {
+      fetchPendingFaqs(false);
+    } else if (activeTab === "users") {
       fetchUsers();
     } else if (activeTab === "audit") {
       fetchAuditLogs();
@@ -411,10 +456,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ nodes, onRefresh
         </div>
 
         {/* Admin Tabs */}
-        <div className="flex items-center gap-2 bg-slate-950 p-1.5 rounded-xl border border-slate-800">
+        <div className="flex items-center gap-1.5 sm:gap-2 bg-slate-950 p-1.5 rounded-xl border border-slate-800 flex-wrap">
           <button
             onClick={() => setActiveTab("content")}
-            className={`flex items-center gap-1.5 text-xs font-bold px-3.5 py-2 rounded-lg transition cursor-pointer ${
+            className={`flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-lg transition cursor-pointer ${
               activeTab === "content" ? "bg-indigo-600 text-white shadow" : "text-slate-400 hover:text-white"
             }`}
           >
@@ -422,8 +467,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ nodes, onRefresh
             مدیریت ساختار محتوا
           </button>
           <button
+            onClick={() => setActiveTab("faqs")}
+            className={`flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-lg transition cursor-pointer relative ${
+              activeTab === "faqs" ? "bg-amber-600 text-white shadow" : "text-slate-400 hover:text-white"
+            }`}
+          >
+            <HelpCircle className="w-4 h-4 text-amber-400" />
+            سوالات جدید کال‌سنتر
+            {pendingFaqs.length > 0 && (
+              <span className="px-1.5 py-0.5 rounded-full bg-amber-500 text-slate-950 text-[10px] font-black animate-pulse">
+                {pendingFaqs.length}
+              </span>
+            )}
+          </button>
+          <button
             onClick={() => setActiveTab("users")}
-            className={`flex items-center gap-1.5 text-xs font-bold px-3.5 py-2 rounded-lg transition cursor-pointer ${
+            className={`flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-lg transition cursor-pointer ${
               activeTab === "users" ? "bg-indigo-600 text-white shadow" : "text-slate-400 hover:text-white"
             }`}
           >
@@ -432,7 +491,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ nodes, onRefresh
           </button>
           <button
             onClick={() => setActiveTab("audit")}
-            className={`flex items-center gap-1.5 text-xs font-bold px-3.5 py-2 rounded-lg transition cursor-pointer ${
+            className={`flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-lg transition cursor-pointer ${
               activeTab === "audit" ? "bg-indigo-600 text-white shadow" : "text-slate-400 hover:text-white"
             }`}
           >
@@ -441,6 +500,43 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ nodes, onRefresh
           </button>
         </div>
       </div>
+
+      {/* NEW PENDING FAQS URGENT ALERT BANNER */}
+      {pendingFaqs.length > 0 && (
+        <div className="bg-gradient-to-r from-amber-950/80 via-amber-900/60 to-slate-900 border-2 border-amber-500/80 p-4 rounded-2xl mb-6 shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-fadeIn">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-amber-500 text-slate-950">
+              <Bell className="w-5 h-5 animate-bounce" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-black text-amber-300">
+                  {pendingFaqs.length} سوال جدید ثبت‌شده توسط اپراتورهای کال‌سنتر در انتظار پاسخ شماست!
+                </span>
+              </div>
+              <p className="text-xs text-amber-200/80 mt-0.5">
+                آخرین سوال: «{pendingFaqs[0].question}» در بخش «{pendingFaqs[0].nodeTitle}»
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsPendingModalOpen(true)}
+              className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 px-4 py-2 rounded-xl text-xs font-black shadow-lg transition cursor-pointer"
+            >
+              <Send className="w-3.5 h-3.5" />
+              باز کردن پاپ‌آپ پاسخ‌دهی فوری
+            </button>
+            <button
+              onClick={() => setActiveTab("faqs")}
+              className="px-3 py-2 rounded-xl border border-amber-500/50 hover:bg-amber-900/40 text-amber-200 text-xs font-bold transition cursor-pointer"
+            >
+              مشاهده در تب
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* PHP & MySQL cPanel Bridge Toolbar */}
       <div className="bg-slate-900/90 border border-slate-800 p-3 rounded-xl mb-6 flex flex-wrap items-center justify-between gap-3 text-xs">
@@ -1092,6 +1188,251 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ nodes, onRefresh
         </div>
       )}
 
+      {/* TAB 2: PENDING & RECENT FAQS FROM CALL CENTER */}
+      {activeTab === "faqs" && (
+        <div className="space-y-6">
+          {/* Header Stats */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
+              <div className="text-xs text-slate-400">سوالات جدید در انتظار پاسخ</div>
+              <div className="text-2xl font-black text-amber-400 mt-1 flex items-center gap-2">
+                <HelpCircle className="w-6 h-6" />
+                {pendingFaqs.length} مورد
+              </div>
+            </div>
+            <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
+              <div className="text-xs text-slate-400">کل سرفصل‌های پایگاه دانش</div>
+              <div className="text-2xl font-black text-sky-400 mt-1 flex items-center gap-2">
+                <Layers className="w-6 h-6" />
+                {nodes.length} سرفصل
+              </div>
+            </div>
+            <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
+              <div className="text-xs text-slate-400">کل سوالات پاسخ‌داده‌شده</div>
+              <div className="text-2xl font-black text-emerald-400 mt-1 flex items-center gap-2">
+                <CheckCircle className="w-6 h-6" />
+                {nodes.reduce((acc, n) => acc + (n.faqs?.filter((f) => f.answer).length || 0), 0)} سوال
+              </div>
+            </div>
+          </div>
+
+          {faqActionMsg && (
+            <div
+              className={`p-4 rounded-2xl border text-xs font-bold flex items-center gap-2 ${
+                faqActionMsg.type === "success"
+                  ? "bg-emerald-950/40 border-emerald-800/50 text-emerald-300"
+                  : "bg-red-950/40 border-red-800/50 text-red-300"
+              }`}
+            >
+              {faqActionMsg.type === "success" ? (
+                <CheckCircle className="w-4 h-4 text-emerald-400" />
+              ) : (
+                <AlertTriangle className="w-4 h-4 text-red-400" />
+              )}
+              <span>{faqActionMsg.text}</span>
+            </div>
+          )}
+
+          {/* Pending Questions Section */}
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
+              <div>
+                <h2 className="text-sm font-bold text-amber-300 flex items-center gap-2">
+                  <HelpCircle className="w-5 h-5 text-amber-400" />
+                  سوالات جدید ثبت‌شده توسط کال‌سنتر (نیاز به پاسخ ادمین)
+                </h2>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  پاسخ‌های ثبت‌شده بلافاصله در بخش سوالات متداول سرفصل مربوطه منتشر می‌شود.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => fetchPendingFaqs(false)}
+                  className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-xl text-xs transition cursor-pointer"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  بروزرسانی لیست
+                </button>
+                {pendingFaqs.length > 0 && (
+                  <button
+                    onClick={() => setIsPendingModalOpen(true)}
+                    className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 px-3.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer"
+                  >
+                    <Send className="w-3.5 h-3.5" />
+                    پاپ‌آپ پاسخ‌دهی سریع
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {pendingFaqs.length === 0 ? (
+              <div className="py-12 text-center text-slate-400 text-xs bg-slate-950/50 rounded-xl border border-slate-800">
+                <CheckCircle className="w-8 h-8 text-emerald-400 mx-auto mb-2 opacity-80" />
+                هیچ سوال جدیدی در انتظار پاسخ نیست. تمامی سوالات پاسخ داده شده‌اند.
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {pendingFaqs.map((faq) => {
+                  const isExpanded = inlineAnswerId === faq.id;
+                  return (
+                    <div
+                      key={faq.id}
+                      className="bg-slate-950 border border-slate-800 hover:border-slate-700 p-5 rounded-2xl space-y-3 transition"
+                    >
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-bold">
+                            در انتظار پاسخ
+                          </span>
+                          <span className="px-2 py-0.5 rounded-md bg-slate-800 text-sky-300 text-xs font-bold">
+                            سرفصل: {faq.nodeTitle}
+                          </span>
+                          <span className="text-xs text-slate-400">
+                            توسط: <strong className="text-white">{faq.submittedBy?.fullName || "اپراتور"}</strong>
+                          </span>
+                        </div>
+                        <span className="text-[11px] text-slate-500 font-mono">
+                          {faq.submittedAt ? new Date(faq.submittedAt).toLocaleString("fa-IR") : ""}
+                        </span>
+                      </div>
+
+                      {/* Question Text */}
+                      <div className="text-sm font-bold text-white bg-slate-900/90 p-3.5 rounded-xl border border-slate-800/80">
+                        {faq.question}
+                      </div>
+
+                      {/* Similarity warning badge if captured */}
+                      {faq.similarityNote && (
+                        <div className="text-xs bg-amber-950/30 border border-amber-900/50 text-amber-200 p-2.5 rounded-xl">
+                          <strong>یادداشت تمایز اپراتور:</strong> {faq.similarityNote}
+                        </div>
+                      )}
+
+                      {/* Inline Answering Editor */}
+                      {isExpanded ? (
+                        <div className="p-4 rounded-xl bg-slate-900 border border-amber-500/40 space-y-3 mt-3 animate-fadeIn">
+                          <div>
+                            <label className="block text-xs font-bold text-slate-300 mb-1">
+                              ویرایش نگارش سوال (اختیاری):
+                            </label>
+                            <input
+                              type="text"
+                              value={inlineEditedQuestion}
+                              onChange={(e) => setInlineEditedQuestion(e.target.value)}
+                              className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-bold text-slate-300 mb-1">
+                              پاسخ رسمی ادمین:
+                            </label>
+                            <textarea
+                              rows={3}
+                              value={inlineAnswerText}
+                              onChange={(e) => setInlineAnswerText(e.target.value)}
+                              placeholder="پاسخ کامل را تایپ نمایید..."
+                              className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white"
+                            />
+                          </div>
+
+                          <div className="flex items-center justify-end gap-2 pt-2">
+                            <button
+                              type="button"
+                              onClick={() => setInlineAnswerId(null)}
+                              className="px-3 py-1.5 rounded-lg border border-slate-700 text-xs text-slate-400 hover:text-white"
+                            >
+                              انصراف
+                            </button>
+                            <button
+                              type="button"
+                              disabled={isSubmittingAnswer}
+                              onClick={async () => {
+                                if (!inlineAnswerText.trim()) {
+                                  alert("لطفاً متن پاسخ را تایپ کنید.");
+                                  return;
+                                }
+                                setIsSubmittingAnswer(true);
+                                try {
+                                  await api.answerFaq(faq.id, inlineAnswerText.trim(), inlineEditedQuestion.trim(), faq.nodeId);
+                                  setFaqActionMsg({ type: "success", text: "پاسخ با موفقیت ثبت و در سامانه منتشر شد." });
+                                  setInlineAnswerId(null);
+                                  fetchPendingFaqs(false);
+                                  onRefreshNodes();
+                                } catch (err: any) {
+                                  setFaqActionMsg({ type: "error", text: err.message || "خطا در ثبت پاسخ" });
+                                } finally {
+                                  setIsSubmittingAnswer(false);
+                                }
+                              }}
+                              className="flex items-center gap-1 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-4 py-1.5 rounded-lg shadow cursor-pointer"
+                            >
+                              {isSubmittingAnswer ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                              ثبت و انتشار پاسخ
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-between pt-2 border-t border-slate-850">
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => {
+                                setInlineAnswerId(faq.id);
+                                setInlineAnswerText("");
+                                setInlineEditedQuestion(faq.question);
+                              }}
+                              className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-3.5 py-1.5 rounded-xl text-xs shadow transition cursor-pointer"
+                            >
+                              <Send className="w-3.5 h-3.5" />
+                              پاسخ‌دهی به این سوال
+                            </button>
+                            {onSelectNode && faq.nodeId && (
+                              <button
+                                onClick={() => onSelectNode(faq.nodeId!)}
+                                className="px-3 py-1.5 rounded-xl border border-slate-800 text-slate-400 hover:text-white text-xs transition"
+                              >
+                                مشاهده سرفصل
+                              </button>
+                            )}
+                          </div>
+
+                          <button
+                            onClick={() => {
+                              setConfirmModal({
+                                isOpen: true,
+                                title: "حذف سوال",
+                                message: `آیا از حذف سوال «${faq.question}» مطمئن هستید؟`,
+                                onConfirm: async () => {
+                                  try {
+                                    await api.deleteFaq(faq.id);
+                                    fetchPendingFaqs(false);
+                                    onRefreshNodes();
+                                    setFaqActionMsg({ type: "success", text: "سوال با موفقیت حذف گردید." });
+                                  } catch (err: any) {
+                                    setFaqActionMsg({ type: "error", text: err.message });
+                                  } finally {
+                                    setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+                                  }
+                                },
+                              });
+                            }}
+                            className="text-red-400 hover:bg-red-500/20 p-1.5 rounded-lg text-xs transition"
+                            title="حذف سوال"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* TAB 3: AUDIT LOGS */}
       {activeTab === "audit" && (
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
@@ -1236,6 +1577,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ nodes, onRefresh
           </div>
         </div>
       )}
+      {/* PENDING FAQS POPUP NOTIFICATION MODAL FOR ADMIN */}
+      <PendingFaqNotificationModal
+        isOpen={isPendingModalOpen}
+        onClose={() => setIsPendingModalOpen(false)}
+        pendingFaqs={pendingFaqs}
+        onAnswered={() => {
+          fetchPendingFaqs(false);
+          onRefreshNodes();
+        }}
+        onDeleted={() => {
+          fetchPendingFaqs(false);
+          onRefreshNodes();
+        }}
+        onViewNode={(nodeId) => {
+          if (onSelectNode) {
+            onSelectNode(nodeId);
+          }
+        }}
+      />
     </div>
   );
 };

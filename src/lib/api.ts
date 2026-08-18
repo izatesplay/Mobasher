@@ -1,7 +1,65 @@
-import { CategoryNode, User, AuditLog, SearchResultItem, AuthResponse } from "../types";
+import { CategoryNode, User, AuditLog, SearchResultItem, AuthResponse, FAQ, SimilarityCheckResult, SimilarFaqItem } from "../types";
 import { INITIAL_NODES, INITIAL_USERS, INITIAL_AUDIT_LOGS } from "../data/initialData";
 
 const TOKEN_KEY = "mobasher_auth_token";
+
+// Client-side Persian text similarity helper for offline / instantaneous feedback
+function normalizePersianClient(text: string): string {
+  if (!text) return "";
+  return text
+    .toLowerCase()
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .replace(/[ي]/g, "ی")
+    .replace(/[ك]/g, "ک")
+    .replace(/[ةۀ]/g, "ه")
+    .replace(/[ؤ]/g, "و")
+    .replace(/[إأآ]/g, "ا")
+    .replace(/[\u064B-\u065F]/g, "")
+    .replace(/[0-9]/g, (w) => "۰۱۲۳۴۵۶۷۸۹"[+w] || w)
+    .replace(/[؟?!\.,،:;؛\-_/\\()\[\]{}"'«»]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function calculateClientSimilarity(s1: string, s2: string): number {
+  const norm1 = normalizePersianClient(s1);
+  const norm2 = normalizePersianClient(s2);
+  if (!norm1 || !norm2) return 0;
+  if (norm1 === norm2) return 100;
+
+  const words1 = norm1.split(" ").filter((w) => w.length > 1);
+  const words2 = norm2.split(" ").filter((w) => w.length > 1);
+
+  let jaccard = 0;
+  if (words1.length > 0 && words2.length > 0) {
+    const set1 = new Set(words1);
+    const set2 = new Set(words2);
+    let inter = 0;
+    for (const w of set1) {
+      if (set2.has(w)) inter++;
+    }
+    const union = new Set([...words1, ...words2]).size;
+    jaccard = union > 0 ? inter / union : 0;
+  }
+
+  // Character bigrams
+  const clean1 = norm1.replace(/\s+/g, "");
+  const clean2 = norm2.replace(/\s+/g, "");
+  const bg1 = new Set<string>();
+  const bg2 = new Set<string>();
+  for (let i = 0; i < clean1.length - 1; i++) bg1.add(clean1.slice(i, i + 2));
+  for (let i = 0; i < clean2.length - 1; i++) bg2.add(clean2.slice(i, i + 2));
+
+  let dice = 0;
+  if (bg1.size > 0 && bg2.size > 0) {
+    let matches = 0;
+    for (const b of bg1) if (bg2.has(b)) matches++;
+    dice = (2 * matches) / (bg1.size + bg2.size);
+  }
+
+  const score = Math.max(jaccard * 0.5 + dice * 0.5, dice * 0.7 + jaccard * 0.3, jaccard, dice);
+  return Math.min(100, Math.round(score * 100));
+}
 
 export function getToken(): string | null {
   return localStorage.getItem(TOKEN_KEY) || localStorage.getItem("mobasher_karmon_token");
@@ -442,6 +500,171 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ question }),
     });
+  },
+
+  // FAQ Management & Similarity
+  async checkFaqSimilarity(question: string): Promise<SimilarityCheckResult> {
+    try {
+      return await request<SimilarityCheckResult>(`/api/faqs/check-similarity?q=${encodeURIComponent(question)}`);
+    } catch (err) {
+      console.warn("Backend check-similarity failed, performing local similarity search:", err);
+      // Fallback local similarity calculation against cached/local nodes
+      const nodes = await this.getNodes().catch(() => INITIAL_NODES);
+      const similarFaqs: SimilarFaqItem[] = [];
+      let maxSim = 0;
+
+      for (const node of nodes) {
+        if (!Array.isArray(node.faqs)) continue;
+        for (const faq of node.faqs) {
+          if (!faq.question) continue;
+          const sim = calculateClientSimilarity(question, faq.question);
+          if (sim >= 70) {
+            if (sim > maxSim) maxSim = sim;
+            similarFaqs.push({
+              id: faq.id,
+              nodeId: node.id,
+              nodeTitle: node.title,
+              question: faq.question,
+              answer: faq.answer,
+              similarityPercent: sim,
+            });
+          }
+        }
+      }
+
+      similarFaqs.sort((a, b) => b.similarityPercent - a.similarityPercent);
+
+      return {
+        isSimilar: maxSim >= 70,
+        maxSimilarity: maxSim,
+        similarFaqs,
+      };
+    }
+  },
+
+  async getPendingFaqs(): Promise<FAQ[]> {
+    try {
+      const res: any = await request<any>("/api/faqs/pending");
+      if (Array.isArray(res)) return res;
+    } catch (err) {
+      console.warn("Failed to fetch pending FAQs from backend:", err);
+    }
+    // Fallback: check nodes
+    const nodes = await this.getNodes().catch(() => INITIAL_NODES);
+    const pending: FAQ[] = [];
+    for (const node of nodes) {
+      if (!Array.isArray(node.faqs)) continue;
+      for (const faq of node.faqs) {
+        if (faq.status === "PENDING" || (!faq.answer && faq.status !== "REJECTED")) {
+          pending.push({ ...faq, nodeId: node.id, nodeTitle: node.title });
+        }
+      }
+    }
+    return pending;
+  },
+
+  async submitFaq(payload: {
+    nodeId: string;
+    question: string;
+    note?: string;
+    confirmedDifferent?: boolean;
+    similarQuestion?: string;
+    similarityPercent?: number;
+  }): Promise<{ status: string; message: string; faq: FAQ }> {
+    try {
+      return await request<{ status: string; message: string; faq: FAQ }>("/api/faqs/submit", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+    } catch (err) {
+      console.warn("Backend submitFaq failed, updating local state:", err);
+      const user = await this.getCurrentUser();
+      const nodes = await this.getNodes().catch(() => INITIAL_NODES);
+      const targetNode = nodes.find((n) => n.id === payload.nodeId);
+      if (!targetNode) throw new Error("سرفصل مورد نظر یافت نشد.");
+
+      const newFaq: FAQ = {
+        id: "faq_" + Date.now(),
+        nodeId: targetNode.id,
+        nodeTitle: targetNode.title,
+        question: payload.question.trim(),
+        answer: "",
+        status: "PENDING",
+        submittedBy: user ? { id: user.id, username: user.username, fullName: user.fullName } : undefined,
+        submittedAt: new Date().toISOString(),
+        similarityNote: payload.note,
+        matchedSimilarQuestion: payload.similarQuestion,
+        matchedSimilarityPercent: payload.similarityPercent,
+      };
+
+      if (!Array.isArray(targetNode.faqs)) targetNode.faqs = [];
+      targetNode.faqs.unshift(newFaq);
+      await this.saveNode(targetNode);
+
+      return {
+        status: "success",
+        message: "سوال با موفقیت ثبت و جهت پاسخ‌دهی برای ادمین ارسال گردید.",
+        faq: newFaq,
+      };
+    }
+  },
+
+  async answerFaq(
+    faqId: string,
+    answer: string,
+    question?: string,
+    nodeId?: string
+  ): Promise<{ status: string; message: string; faq: FAQ }> {
+    try {
+      return await request<{ status: string; message: string; faq: FAQ }>(`/api/faqs/${encodeURIComponent(faqId)}/answer`, {
+        method: "PUT",
+        body: JSON.stringify({ answer, question, nodeId }),
+      });
+    } catch (err) {
+      console.warn("Backend answerFaq failed, updating local nodes:", err);
+      const user = await this.getCurrentUser();
+      const nodes = await this.getNodes().catch(() => INITIAL_NODES);
+
+      let foundFaq: FAQ | undefined;
+      for (const node of nodes) {
+        if (!Array.isArray(node.faqs)) continue;
+        const f = node.faqs.find((item) => item.id === faqId);
+        if (f) {
+          f.answer = answer.trim();
+          if (question && question.trim()) f.question = question.trim();
+          f.status = "ANSWERED";
+          f.answeredBy = user ? { id: user.id, username: user.username, fullName: user.fullName } : undefined;
+          f.answeredAt = new Date().toISOString();
+          foundFaq = f;
+          await this.saveNode(node);
+          break;
+        }
+      }
+
+      if (!foundFaq) throw new Error("سوال مورد نظر یافت نشد.");
+      return { status: "success", message: "پاسخ با موفقیت ذخیره گردید.", faq: foundFaq };
+    }
+  },
+
+  async deleteFaq(faqId: string): Promise<{ status: string; message: string }> {
+    try {
+      return await request<{ status: string; message: string }>(`/api/faqs/${encodeURIComponent(faqId)}`, {
+        method: "DELETE",
+      });
+    } catch (err) {
+      console.warn("Backend deleteFaq failed, updating local nodes:", err);
+      const nodes = await this.getNodes().catch(() => INITIAL_NODES);
+      for (const node of nodes) {
+        if (!Array.isArray(node.faqs)) continue;
+        const idx = node.faqs.findIndex((f) => f.id === faqId);
+        if (idx !== -1) {
+          node.faqs.splice(idx, 1);
+          await this.saveNode(node);
+          break;
+        }
+      }
+      return { status: "success", message: "سوال با موفقیت حذف گردید." };
+    }
   },
 
   // PHP MySQL Bridge API Helpers
