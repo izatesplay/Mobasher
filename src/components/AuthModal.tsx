@@ -18,7 +18,9 @@ import {
   KeyRound,
   Sun,
   Moon,
+  Clock,
 } from "lucide-react";
+import { getAndClearSessionNotice } from "../lib/sessionManager";
 
 interface PublicUser {
   id: string;
@@ -40,9 +42,18 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [loginLoading, setLoginLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sessionNotice, setSessionNotice] = useState<string | null>(null);
   const [searchFilter, setSearchFilter] = useState("");
   const [manualMode, setManualMode] = useState(false);
   const [manualUsername, setManualUsername] = useState("");
+
+  // Check for inactivity expiration notice on mount
+  useEffect(() => {
+    const notice = getAndClearSessionNotice();
+    if (notice) {
+      setSessionNotice(notice);
+    }
+  }, []);
 
   // Load public users list
   useEffect(() => {
@@ -164,9 +175,17 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess }) => {
           </div>
         </div>
 
+        {/* Session Inactivity Notice */}
+        {sessionNotice && (
+          <div className="p-3.5 bg-amber-500/15 border border-amber-500/30 rounded-2xl text-xs sm:text-sm text-amber-600 dark:text-amber-300 flex items-start gap-2.5">
+            <Clock className="w-4 h-4 text-amber-500 mt-0.5 shrink-0 animate-pulse" />
+            <span>{sessionNotice}</span>
+          </div>
+        )}
+
         {/* Error Notification */}
         {error && (
-          <div className="p-3.5 bg-red-500/10 border border-red-500/30 rounded-2xl text-xs sm:text-sm text-red-600 flex items-start gap-2.5">
+          <div className="p-3.5 bg-red-500/10 border border-red-500/30 rounded-2xl text-xs sm:text-sm text-red-600 dark:text-red-400 flex items-start gap-2.5">
             <AlertCircle className="w-4 h-4 text-red-500 mt-0.5 shrink-0" />
             <span>{error}</span>
           </div>

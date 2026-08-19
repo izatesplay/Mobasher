@@ -1,7 +1,15 @@
 import { CategoryNode, User, AuditLog, SearchResultItem, AuthResponse, FAQ, SimilarityCheckResult, SimilarFaqItem } from "../types";
 import { INITIAL_NODES, INITIAL_USERS, INITIAL_AUDIT_LOGS } from "../data/initialData";
-
-const TOKEN_KEY = "mobasher_auth_token";
+import {
+  TOKEN_KEY,
+  BACKUP_TOKEN_KEY,
+  USER_KEY,
+  saveUserSession,
+  clearUserSession,
+  isSessionExpiredDueToInactivity,
+  recordUserActivity,
+  getLastActivityTime,
+} from "./sessionManager";
 
 // Client-side Persian text similarity helper for offline / instantaneous feedback
 function normalizePersianClient(text: string): string {
@@ -62,21 +70,29 @@ function calculateClientSimilarity(s1: string, s2: string): number {
 }
 
 export function getToken(): string | null {
-  return localStorage.getItem(TOKEN_KEY) || localStorage.getItem("mobasher_karmon_token");
+  if (isSessionExpiredDueToInactivity()) {
+    clearUserSession("inactivity");
+    return null;
+  }
+  return localStorage.getItem(TOKEN_KEY) || localStorage.getItem(BACKUP_TOKEN_KEY);
 }
 
 export function setToken(token: string) {
   localStorage.setItem(TOKEN_KEY, token);
-  localStorage.setItem("mobasher_karmon_token", token);
+  localStorage.setItem(BACKUP_TOKEN_KEY, token);
+  recordUserActivity(true);
 }
 
 export function removeToken() {
-  localStorage.removeItem(TOKEN_KEY);
-  localStorage.removeItem("mobasher_karmon_token");
-  localStorage.removeItem("mobasher_current_user");
+  clearUserSession("manual");
 }
 
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  if (isSessionExpiredDueToInactivity()) {
+    clearUserSession("inactivity");
+    throw new Error("نشست شما به دلیل ۳۰ دقیقه عدم فعالیت منقضی گردید. لطفاً مجدداً وارد شوید.");
+  }
+
   const token = getToken();
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -94,6 +110,7 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     });
 
     if (response.ok) {
+      recordUserActivity();
       const data = await response.json();
       return data as T;
     }
@@ -210,8 +227,7 @@ export const api = {
         body: JSON.stringify({ username, password }),
       });
       if (res && res.user && res.token) {
-        setToken(res.token);
-        localStorage.setItem("mobasher_current_user", JSON.stringify(res.user));
+        saveUserSession(res.user, res.token);
         return res;
       }
     } catch (err: any) {
@@ -229,8 +245,7 @@ export const api = {
         createdAt: new Date().toISOString(),
       };
       const mockToken = "token_admin_" + Date.now();
-      setToken(mockToken);
-      localStorage.setItem("mobasher_current_user", JSON.stringify(fallbackUser));
+      saveUserSession(fallbackUser, mockToken);
       return { user: fallbackUser, token: mockToken };
     }
     if (cleanUser === "operator1" && password === "user123") {
@@ -243,8 +258,7 @@ export const api = {
         createdAt: new Date().toISOString(),
       };
       const mockToken = "token_op1_" + Date.now();
-      setToken(mockToken);
-      localStorage.setItem("mobasher_current_user", JSON.stringify(fallbackUser));
+      saveUserSession(fallbackUser, mockToken);
       return { user: fallbackUser, token: mockToken };
     }
     if (cleanUser === "operator2" && password === "user123") {
@@ -257,8 +271,7 @@ export const api = {
         createdAt: new Date().toISOString(),
       };
       const mockToken = "token_op2_" + Date.now();
-      setToken(mockToken);
-      localStorage.setItem("mobasher_current_user", JSON.stringify(fallbackUser));
+      saveUserSession(fallbackUser, mockToken);
       return { user: fallbackUser, token: mockToken };
     }
 
@@ -266,17 +279,37 @@ export const api = {
   },
 
   async getMe(): Promise<{ user: User }> {
-    try {
-      return await request<{ user: User }>("/api/auth/me");
-    } catch (err) {
-      const stored = localStorage.getItem("mobasher_current_user");
-      if (stored) {
-        try {
-          return { user: JSON.parse(stored) };
-        } catch (e) {}
-      }
-      throw err;
+    if (isSessionExpiredDueToInactivity()) {
+      clearUserSession("inactivity");
+      throw new Error("نشست شما به دلیل ۳۰ دقیقه عدم فعالیت منقضی گردید.");
     }
+
+    const token = getToken();
+    if (!token) {
+      throw new Error("نشست کاربری یافت نشد.");
+    }
+
+    try {
+      const data = await request<{ user: User }>("/api/auth/me");
+      if (data && data.user) {
+        saveUserSession(data.user, token);
+        return data;
+      }
+    } catch (err) {
+      console.warn("API /auth/me error, attempting cached session:", err);
+    }
+
+    const stored = localStorage.getItem(USER_KEY);
+    if (stored) {
+      try {
+        const parsedUser = JSON.parse(stored);
+        if (parsedUser && parsedUser.id) {
+          recordUserActivity();
+          return { user: parsedUser };
+        }
+      } catch (e) {}
+    }
+    throw new Error("نشست کاربری نامعتبر است.");
   },
 
   async getCurrentUser(): Promise<User> {
@@ -285,7 +318,7 @@ export const api = {
   },
 
   logout() {
-    removeToken();
+    clearUserSession("manual");
   },
 
   // Knowledge Base Nodes

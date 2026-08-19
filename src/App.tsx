@@ -1,6 +1,14 @@
 import React, { useState, useEffect } from "react";
 import { User, CategoryNode } from "./types";
 import { api } from "./lib/api";
+import {
+  initSessionInactivityTracker,
+  isSessionExpiredDueToInactivity,
+  clearUserSession,
+  recordUserActivity,
+  TOKEN_KEY,
+  BACKUP_TOKEN_KEY,
+} from "./lib/sessionManager";
 import { useTheme } from "./context/ThemeContext";
 import { Header } from "./components/Header";
 import { SidebarTree } from "./components/SidebarTree";
@@ -28,13 +36,38 @@ export function App() {
   const [isAiDrawerOpen, setIsAiDrawerOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  // Initial Auth Check and Data Fetching
+  // Initial Auth Check on Page Load / Refresh
   useEffect(() => {
     checkInitialAuth();
   }, []);
 
+  // 30-Minute Inactivity Session Tracker (Active while user is logged in)
+  useEffect(() => {
+    if (!currentUser) return;
+
+    // Start tracking user activity (mouse, keyboard, scroll, touch, clicks)
+    const cleanupTracker = initSessionInactivityTracker(() => {
+      // Callback triggered when 30 minutes of inactivity is reached
+      setCurrentUser(null);
+      setNodes([]);
+      setSelectedNodeId(null);
+      setSelectedTargetTab(undefined);
+    });
+
+    return () => {
+      cleanupTracker();
+    };
+  }, [currentUser]);
+
   const checkInitialAuth = async () => {
-    const token = localStorage.getItem("mobasher_auth_token");
+    // 1. Check if 30 minutes of inactivity has already elapsed
+    if (isSessionExpiredDueToInactivity()) {
+      clearUserSession("inactivity");
+      setIsAuthChecking(false);
+      return;
+    }
+
+    const token = localStorage.getItem(TOKEN_KEY) || localStorage.getItem(BACKUP_TOKEN_KEY);
     if (!token) {
       setIsAuthChecking(false);
       return;
@@ -42,11 +75,19 @@ export function App() {
 
     try {
       const user = await api.getCurrentUser();
-      setCurrentUser(user);
-      await fetchCategoryNodes();
+      if (user && user.id) {
+        setCurrentUser(user);
+        recordUserActivity(true);
+        await fetchCategoryNodes();
+      } else {
+        clearUserSession("manual");
+      }
     } catch (err) {
-      console.error("Auth check failed:", err);
-      localStorage.removeItem("mobasher_auth_token");
+      console.warn("Session validation error on refresh:", err);
+      // If error is specifically inactivity expiration
+      if (isSessionExpiredDueToInactivity()) {
+        clearUserSession("inactivity");
+      }
     } finally {
       setIsAuthChecking(false);
     }
@@ -63,6 +104,7 @@ export function App() {
 
   const handleLoginSuccess = async (user: User) => {
     setCurrentUser(user);
+    recordUserActivity(true);
     await fetchCategoryNodes();
   };
 
